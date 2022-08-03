@@ -50,19 +50,6 @@ class BuildTree:
         if 'workdir' not in global_config:
             global_config['workdir'] = os.path.join(root, 'output')
 
-        ignore_fn = os.path.join(root, '.gitignore')
-        self.ignores = set()
-        if os.path.exists(ignore_fn):
-            old_cwd = os.getcwd()
-            os.chdir(root)
-            try:
-                with open(ignore_fn) as f:
-                    for line in f:
-                        for ig in glob.glob(line.strip()):
-                            self.ignores.add(ig.strip('/'))
-            finally:
-                os.chdir(old_cwd)
-
         self.output_names = set()
 
     def read_global_variable(self, name, config = dict()):
@@ -105,14 +92,11 @@ class BuildTree:
             out = out.replace(raw, str(value))
         return out
 
-    def read_dir(self, name):
-        name = name.strip('/')
-
-        global_config = self.global_config
-        root = self.root
-        path = os.path.join(root, name)
+    def read_dir(self, path):
         if not os.path.isdir(path):
             return
+
+        global_config = self.global_config
 
         config = read_config(path)
         if not config:
@@ -174,15 +158,21 @@ class BuildTree:
 
             yield path, copy.deepcopy(config)
 
-    def walk(self):
-        global_config = self.global_config
-        root = self.root
-        for name in os.listdir(root):
-            name = name.strip('/')
-            if name.startswith('.'):
-                continue
-            if name in self.ignores:
-                continue
-            for ret in self.read_dir(name):
+    def walk(self, path=None):
+        if path is None:
+            path = self.root
+        if not os.path.isdir(path):
+            return
+        if os.path.basename(path.strip('/')).startswith('.'):
+            return
+        has_child = False
+        for name in os.listdir(path):
+            for ret in self.walk(os.path.join(path, name)):
+                has_child = True
                 yield ret
-
+        if has_child:
+            return
+        if not os.path.exists(os.path.join(path, 'config.yaml')):
+            return
+        for ret in self.read_dir(path):
+            yield ret
