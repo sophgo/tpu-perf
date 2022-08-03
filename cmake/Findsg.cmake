@@ -3,15 +3,15 @@ include(FindPackageHandleStandardArgs)
 find_path(
     sg_INCLUDE_DIR
     NAMES bmlib_runtime.h
-    HINTS /opt/sophon/sdk-current/include)
+    HINTS /opt/sophon/libsophon-current/include)
 find_library(
     bmlib_LIBRARY
     NAMES bmlib
-    HINTS /opt/sophon/sdk-current/lib)
+    HINTS /opt/sophon/libsophon-current/lib)
 find_library(
     bmrt_LIBRARY
     NAMES bmrt
-    HINTS /opt/sophon/sdk-current/lib)
+    HINTS /opt/sophon/libsophon-current/lib)
 
 find_package_handle_standard_args(
     sg
