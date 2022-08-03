@@ -55,12 +55,12 @@ class CommandExecutor:
         self.logs = []
         self.pipes = []
         for title, args, kw_args in bulk:
-            cmd_fn = os.path.join(self.cwd, f'{title}.cmd')
+            cmd_fn = os.path.join(kw_args['cwd'], f'{title}.cmd')
             with open(cmd_fn, 'w') as f:
                 pprint(args, f)
                 pprint(kw_args, f)
                 f.write(f'\n\n---------------\n{args}\n')
-            log_fn = os.path.join(self.cwd, f'{title}.log')
+            log_fn = os.path.join(kw_args['cwd'], f'{title}.log')
             log = open(log_fn, 'w')
             p = subprocess.Popen(*args, **kw_args, stdout=log, stderr=log)
             self.logs.append((log_fn, log))

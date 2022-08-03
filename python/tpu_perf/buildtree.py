@@ -146,7 +146,7 @@ class BuildTree:
             os.makedirs(workdir, exist_ok=True)
 
             # Default configuration
-            config['home'] = path
+            config['home'] = os.path.abspath(path)
             config['workdir'] = workdir
             if 'bmnetu_batch_sizes' not in config:
                 config['bmnetu_batch_sizes'] = [1]

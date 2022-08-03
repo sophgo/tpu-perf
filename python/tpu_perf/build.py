@@ -24,7 +24,49 @@ def replace_shape_batch(cmd, batch_size):
 
 option_time_only = False
 
-def build(tree, path, config):
+def build_mlir(tree, path, config):
+    workdir = config['workdir']
+    name = config['name']
+    env = [
+        tree.expand_variables(config, v)
+        for v in config.get('mlir_build_env', [])]
+    pool = CommandExecutor(workdir, env)
+
+    if 'mlir_transform' in config:
+        logging.info(f'Transforming MLIR {name}...')
+        trans_cmd = tree.expand_variables(config, config['mlir_transform'])
+        pool.put('mlir_transform', trans_cmd)
+        pool.wait()
+        logging.info(f'Transform MLIR {name} done')
+
+    if 'mlir_calibration' in config:
+        logging.info(f'Calibrating MLIR {name}...')
+        cali_cmd = tree.expand_variables(config, config['mlir_calibration'])
+        pool.put('mlir_calibration', cali_cmd)
+        pool.wait()
+        logging.info(f'Calibrate MLIR {name} done')
+
+    if 'deploy' in config:
+        logging.info(f'Deploying {name}...')
+        if type(config['deploy']) != list:
+            config['deploy'] = [config['deploy']]
+        fns = [fn for fn in os.listdir(workdir) if fn.endswith('npz')]
+        for i, deploy in enumerate(config['deploy']):
+            title = f'mlir_deploy.{i}'
+            cwd = os.path.join(workdir, title)
+            os.makedirs(cwd, exist_ok=True)
+            for fn in fns:
+                shutil.copyfile(
+                    os.path.join(workdir, fn),
+                    os.path.join(cwd, fn))
+            pool.put(
+                title,
+                tree.expand_variables(config, deploy),
+                cwd=cwd)
+            pool.wait()
+        logging.info(f'Deploy {name} done')
+
+def build_nntc(tree, path, config):
     workdir = config['workdir']
     if option_time_only and not config.get('time', True):
         return
@@ -108,6 +150,7 @@ def main():
         'models', metavar='MODEL', type=str, nargs='*',
         help='models to build')
     parser.add_argument('--time', action='store_true')
+    parser.add_argument('--mlir', action='store_true')
     args = parser.parse_args()
     global option_time_only
     option_time_only = args.time
@@ -122,18 +165,20 @@ def main():
         logging.info(
             f'System memory {mem_size}, using {num_workers} workers.')
 
+    build_fn = build_mlir if args.mlir else build_nntc
+
     from concurrent.futures import ThreadPoolExecutor, as_completed
     with ThreadPoolExecutor(max_workers=num_workers) as executor:
         futures = []
 
         if not args.models:
             for path, config in tree.walk():
-                f = executor.submit(build, tree, path, config)
+                f = executor.submit(build_fn, tree, path, config)
                 futures.append(f)
         else:
             for name in args.models:
                 for path, config in tree.read_dir(name):
-                    f = executor.submit(build, tree, path, config)
+                    f = executor.submit(build_fn, tree, path, config)
                     futures.append(f)
 
         for f in as_completed(futures):
