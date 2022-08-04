@@ -93,12 +93,22 @@ class BuildTree:
         return out
 
     def read_dir(self, path):
-        if not os.path.isdir(path):
-            return
+        for fn in os.listdir(path):
+            if not fn.endswith('.yaml'):
+                continue
+            fn = os.path.join(path, fn)
+            if not os.path.isfile(fn):
+                continue
+            for ret in self._read_dir(fn):
+                yield ret
 
+    def _read_dir(self, config_fn):
+        path = os.path.dirname(config_fn)
         global_config = self.global_config
 
-        config = read_config(path)
+        with open(config_fn) as f:
+            config = yaml.load(f, yaml.Loader)
+
         if not config:
             return
         if config.get('ignore'):
@@ -171,8 +181,6 @@ class BuildTree:
                 has_child = True
                 yield ret
         if has_child:
-            return
-        if not os.path.exists(os.path.join(path, 'config.yaml')):
             return
         for ret in self.read_dir(path):
             yield ret

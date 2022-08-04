@@ -151,6 +151,7 @@ def main():
         help='models to build')
     parser.add_argument('--time', action='store_true')
     parser.add_argument('--mlir', action='store_true')
+    parser.add_argument('--exit-on-error', action='store_true')
     args = parser.parse_args()
     global option_time_only
     option_time_only = args.time
@@ -185,7 +186,8 @@ def main():
             err = f.exception()
             if err:
                 logging.error(f'Quit because of exception, {err}')
-                os._exit(-1)
+                if args.exit_on_error:
+                    os._exit(-1)
 
 if __name__ == '__main__':
     main()
