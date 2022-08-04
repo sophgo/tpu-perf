@@ -165,8 +165,8 @@ class BuildTree:
             if 'bmnetu_batch_sizes' not in config:
                 config['bmnetu_batch_sizes'] = [1]
 
-            if 'lmdb' in config:
-                key = hash_name(config['lmdb'])
+            if 'input' in config:
+                key = hash_name(config['input'])
                 config['lmdb_out'] = os.path.join(
                     self.read_global_variable('data_dir'), key)
 

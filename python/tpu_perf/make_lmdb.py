@@ -13,9 +13,9 @@ load_plugins()
 
 def build_lmdb(data_dir, tree, path, config):
     from .preprocess import get_preprocess_method
-    if 'lmdb' not in config:
+    if 'input' not in config:
         return
-    data_config = config['lmdb']
+    data_config = config['input']
     name = data_config['dataset']
     if name not in tree.global_config:
         logging.error(f'Invalid dataset {name}')
