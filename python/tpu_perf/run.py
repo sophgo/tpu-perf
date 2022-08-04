@@ -157,6 +157,8 @@ def run_mlir(tree, path, config, stat_f):
             name = os.path.splitext(fn)[0]
             bmodel = os.path.join(dirpath, fn)
             profile_path = bmodel + '.compiler_profile_0.txt'
+            config = config.copy()
+            config['name'] = name
             run_model(
                 tree, config,
                 name,
