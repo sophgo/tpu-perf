@@ -94,7 +94,7 @@ class BuildTree:
 
     def read_dir(self, path):
         for fn in os.listdir(path):
-            if not fn.endswith('.yaml'):
+            if not fn.endswith('config.yaml'):
                 continue
             fn = os.path.join(path, fn)
             if not os.path.isfile(fn):
@@ -113,6 +113,10 @@ class BuildTree:
             return
         if config.get('ignore'):
             return
+
+        if 'name' not in config:
+            logging.error(f'Invalid config {config_fn}')
+            raise RuntimeError('Invalid config')
 
         # Pre expand non-string variables. Because variable
         # processing logic might rely on this.
