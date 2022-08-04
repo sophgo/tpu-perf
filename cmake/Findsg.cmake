@@ -1,17 +1,28 @@
 include(FindPackageHandleStandardArgs)
 
+if (DEFINED sg_PATH)
+    set(sg_include_path ${sg_PATH}/include)
+    set(sg_lib_path ${sg_PATH}/lib)
+endif()
+
 find_path(
     sg_INCLUDE_DIR
     NAMES bmlib_runtime.h
-    HINTS /opt/sophon/libsophon-current/include)
+    HINTS
+    /opt/sophon/libsophon-current/include
+    ${sg_include_path})
 find_library(
     bmlib_LIBRARY
     NAMES bmlib
-    HINTS /opt/sophon/libsophon-current/lib)
+    HINTS
+    /opt/sophon/libsophon-current/lib
+    ${sg_lib_path})
 find_library(
     bmrt_LIBRARY
     NAMES bmrt
-    HINTS /opt/sophon/libsophon-current/lib)
+    HINTS
+    /opt/sophon/libsophon-current/lib
+    ${sg_lib_path})
 
 find_package_handle_standard_args(
     sg

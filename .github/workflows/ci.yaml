@@ -1,0 +1,39 @@
+name: Build And Test
+
+on:
+  push:
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-18.04
+
+    steps:
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.7'
+
+      - name: Checkout Code
+        uses: actions/checkout@v2
+        with:
+          lfs: true
+          fetch-depth: 1
+
+      - name: Build
+        run: .github/workflows/build.sh
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v3
+        if: failure()
+        with:
+          path: example/output/pnet/*.log
+
+      - name: Release
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            python/dist/*.whl
