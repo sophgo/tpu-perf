@@ -36,8 +36,9 @@ def parse_stats(string):
     for k in ret.keys():
         ret[k] = ret[k].get()
 
-    shape_prog = 'Input \d+\).+shape=\[ (\d+) (\d+) (\d+) (\d+) \]'
-    shape_info = ':'.join('x'.join(s) for s in re.findall(shape_prog, string))
+    shape_prog = 'Input \d+\).+shape=\[([\d ]+)\]'
+    shape_info = ':'.join(
+        'x'.join(s.split()) for s in re.findall(shape_prog, string))
     ret['shape'] = shape_info
 
     return ret
