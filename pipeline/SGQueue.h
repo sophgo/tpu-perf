@@ -23,40 +23,37 @@ private:
         std::shared_ptr<T> data;
         std::unique_ptr<Node> next;
     };
-    std::mutex head_mutex;
+    std::mutex mut;
     std::unique_ptr<Node> head;
-    std::mutex tail_mutex;
     Node* tail;
     bool joined = false;
     size_t max_nodes;
     std::atomic<size_t> num_nodes;
-    std::condition_variable data_cond;
-    Node* getTail(){
-        LOCK(tail);
-        return tail;
-    }
+    std::condition_variable data_cond, slot_cond;
+
     std::unique_ptr<Node> popHead(){
         auto old_head = std::move(head);
         head = std::move(old_head->next);
         num_nodes.fetch_sub(1, std::memory_order_acq_rel);
+        slot_cond.notify_one();
         return old_head;
     }
 
     std::unique_lock<std::mutex> waitForData(){
-        std::unique_lock<std::mutex> ulock(head_mutex);
+        std::unique_lock<std::mutex> ulock(mut);
         data_cond.wait(ulock, [&]{ return head.get() != tail || joined; });
         return ulock;
     }
 
     std::unique_ptr<Node> waitPopHead(){
         std::unique_lock<std::mutex> head_lock(waitForData());
-        if (head.get() == getTail()) return nullptr;
+        if (head.get() == tail) return nullptr;
         return popHead();
     }
 
     std::unique_ptr<Node> tryPopHead(){
-        LOCK(head);
-        if (head.get() == getTail()){
+        std::lock_guard<std::mutex> ulock(mut);
+        if (head.get() == tail){
             return std::unique_ptr<Node>();
         }
         return popHead();
@@ -93,8 +90,9 @@ public:
     }
 
     void join() {
-        LOCK(head);
+        std::lock_guard<std::mutex> ulock(mut);
         joined = true;
+        slot_cond.notify_all();
         data_cond.notify_all();
     }
 
@@ -110,21 +108,23 @@ public:
         std::shared_ptr<T> new_data(
                     std::make_shared<T>(std::move(new_value)));
         std::unique_ptr<Node> new_node(new Node);
-        while(!canPush()) std::this_thread::yield();
+
+        std::unique_lock<std::mutex> ulock(mut);
+        slot_cond.wait(ulock, [&]{ return canPush() || joined; });
+        if (canPush())
         {
-            LOCK(tail);
             tail->data = new_data;
             auto new_tail = new_node.get();
             tail->next = std::move(new_node);
             tail = new_tail;
             num_nodes.fetch_add(1, std::memory_order_acq_rel);
+            data_cond.notify_one();
         }
-        data_cond.notify_one();
     }
 
     bool empty() {
-        LOCK(head);
-        return head.get() == getTail();
+        std::lock_guard<std::mutex> ulock(mut);
+        return head.get() == tail;
     }
 };
 
