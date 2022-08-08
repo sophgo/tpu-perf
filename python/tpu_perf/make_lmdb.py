@@ -48,7 +48,11 @@ def main():
 
     if not check_buildtree():
         sys.exit(1)
-    tree = BuildTree(os.path.abspath('.'))
+    import argparse
+    parser = argparse.ArgumentParser(description='tpu-perf benchmark tool')
+    BuildTree.add_arguments(parser)
+    args = parser.parse_args()
+    tree = BuildTree(os.path.abspath('.'), args)
 
     # Prepare data path
     try:
@@ -76,15 +80,9 @@ def main():
     with ThreadPoolExecutor(max_workers=num_workers) as executor:
         futures = []
 
-        if len(sys.argv) == 1:
-            for path, config in tree.walk():
-                f = executor.submit(build_lmdb, data_dir, tree, path, config)
-                futures.append(f)
-        else:
-            for name in sys.argv[1:]:
-                for path, config in tree.read_dir(name):
-                    f = executor.submit(build_lmdb, data_dir, tree, path, config)
-                    futures.append(f)
+        for path, config in tree.walk():
+            f = executor.submit(build_lmdb, data_dir, tree, path, config)
+            futures.append(f)
 
         for f in as_completed(futures):
             err = f.exception()

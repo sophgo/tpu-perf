@@ -191,9 +191,7 @@ def main():
 
     import argparse
     parser = argparse.ArgumentParser(description='tpu-perf benchmark tool')
-    parser.add_argument(
-        'models', metavar='MODEL', type=str, nargs='*',
-        help='models to run')
+    BuildTree.add_arguments(parser)
     parser.add_argument('--cmodel', action='store_true')
     parser.add_argument('--mlir', action='store_true')
     args = parser.parse_args()
@@ -203,7 +201,7 @@ def main():
     if not check_buildtree():
         sys.exit(1)
 
-    tree = BuildTree(os.path.abspath('.'))
+    tree = BuildTree(os.path.abspath('.'), args)
     stat_fn = os.path.join(tree.global_config['workdir'], 'stats.csv')
     run_func = run_mlir if args.mlir else run_nntc
     with open(stat_fn, 'w') as f:
@@ -230,13 +228,8 @@ def main():
                 'cpu_usage',
                 'ddr_utilization'])
 
-        if not args.models:
-            for path, config in tree.walk():
-                run_func(tree, path, config, csv_f)
-        else:
-            for name in args.models:
-                for path, config in tree.read_dir(name):
-                    run_func(tree, path, config, csv_f)
+        for path, config in tree.walk():
+            run_func(tree, path, config, csv_f)
 
 if __name__ == '__main__':
     main()

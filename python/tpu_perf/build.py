@@ -146,17 +146,15 @@ def main():
 
     import argparse
     parser = argparse.ArgumentParser(description='tpu-perf benchmark tool')
-    parser.add_argument(
-        'models', metavar='MODEL', type=str, nargs='*',
-        help='models to build')
     parser.add_argument('--time', action='store_true')
     parser.add_argument('--mlir', action='store_true')
     parser.add_argument('--exit-on-error', action='store_true')
+    BuildTree.add_arguments(parser)
     args = parser.parse_args()
     global option_time_only
     option_time_only = args.time
 
-    tree = BuildTree(os.path.abspath('.'))
+    tree = BuildTree(os.path.abspath('.'), args)
 
     mem_size = sys_memory_size()
     max_workers = max(1, int(mem_size / 1024 / 1024 / 12))
@@ -172,15 +170,9 @@ def main():
     with ThreadPoolExecutor(max_workers=num_workers) as executor:
         futures = []
 
-        if not args.models:
-            for path, config in tree.walk():
-                f = executor.submit(build_fn, tree, path, config)
-                futures.append(f)
-        else:
-            for name in args.models:
-                for path, config in tree.read_dir(name):
-                    f = executor.submit(build_fn, tree, path, config)
-                    futures.append(f)
+        for path, config in tree.walk():
+            f = executor.submit(build_fn, tree, path, config)
+            futures.append(f)
 
         for f in as_completed(futures):
             err = f.exception()

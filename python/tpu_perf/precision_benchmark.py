@@ -56,15 +56,15 @@ def main():
     if not check_buildtree():
         sys.exit(1)
 
-    tree = BuildTree(os.path.abspath('.'))
+    import argparse
+    parser = argparse.ArgumentParser(description='tpu-perf benchmark tool')
+    BuildTree.add_arguments(parser)
+    args = parser.parse_args()
+
+    tree = BuildTree(os.path.abspath('.'), args)
     runner = Runner()
-    if len(sys.argv) == 1:
-        for path, config in tree.walk():
-            runner.run(tree, path, config)
-    else:
-        for name in sys.argv[1:]:
-            for path, config in tree.read_dir(name):
-                runner.run(tree, path, config)
+    for path, config in tree.walk():
+        runner.run(tree, path, config)
 
 if __name__ == '__main__':
     main()

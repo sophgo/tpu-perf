@@ -43,17 +43,41 @@ def check_buildtree():
     return ok
 
 class BuildTree:
-    def __init__(self, root):
+    def __init__(self, root, args = None):
         self.root = root
         self.global_config = global_config = read_config(root) or dict()
         global_config['root'] = root
         if 'workdir' not in global_config:
             global_config['workdir'] = os.path.join(root, 'output')
 
+        self.cases = []
+        if not args.full:
+            if 'default_cases' in self.global_config:
+                self.cases = self.global_config['default_cases']
+            if args.list:
+                with open(args.list) as f:
+                    lines = [l.strip(' \n') for l in f.readlines()]
+                    lines = [l for l in lines if l]
+                self.cases = lines
+            if args.models:
+                self.cases = args.models
+
         self.output_names = set()
 
-    def read_global_variable(self, name, config = dict()):
-        return self.expand_variables(config, self.global_config[name])
+    @staticmethod
+    def add_arguments(parser):
+        parser.add_argument(
+            'models', metavar='MODEL', type=str, nargs='*',
+            help='model directories to run')
+        parser.add_argument('--full', action='store_true', help='Run all cases')
+        parser.add_argument('--list', '-l', type=str, help='Case list')
+
+    def read_global_variable(self, name, config = dict(), default=None):
+        if default is None and name not in self.global_config:
+            logging.error(f'Invalid global config field {name}')
+            raise RuntimeError('Invalid Field')
+        return self.expand_variables(
+            config, self.global_config.get(name, default))
 
     whole_var_pattern = '^\$\(([a-z0-9_]+)\)$'
 
@@ -167,13 +191,19 @@ class BuildTree:
 
             if 'input' in config:
                 key = hash_name(config['input'])
-                config['lmdb_out'] = os.path.join(
-                    self.read_global_variable('data_dir'), key)
+                data_dir = self.read_global_variable(
+                    'data_dir', default='$(root)/data')
+                config['lmdb_out'] = os.path.join(data_dir, key)
 
             yield path, copy.deepcopy(config)
 
     def walk(self, path=None):
         if path is None:
+            if self.cases:
+                for path in self.cases:
+                    for ret in self.read_dir(path):
+                        yield ret
+                return
             path = self.root
         if not os.path.isdir(path):
             return
