@@ -34,12 +34,7 @@ def build_lmdb(data_dir, tree, path, config):
         with open(info_fn, 'w') as f:
             yaml.dump(data_config, f)
 
-    old_cwd = os.getcwd()
-    os.chdir(out_path)
-    try:
-        preprocess(data_path, out_path, tree, config)
-    finally:
-        os.chdir(old_cwd)
+    preprocess(data_path, out_path, tree, config)
 
 def main():
     logging.basicConfig(

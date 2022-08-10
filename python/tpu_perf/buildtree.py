@@ -201,6 +201,7 @@ class BuildTree:
         if path is None:
             if self.cases:
                 for path in self.cases:
+                    path = os.path.join(self.root, path)
                     for ret in self.read_dir(path):
                         yield ret
                 return
