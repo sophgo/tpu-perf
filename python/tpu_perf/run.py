@@ -184,7 +184,8 @@ def run_mlir(tree, path, config, stat_f, extra):
                 1,
                 profile_path,
                 bmodel,
-                stat_f)
+                stat_f,
+                extra)
 
 def run_nntc(tree, path, raw_config, stat_f, extra):
     if not raw_config.get('time', True):
