@@ -104,7 +104,7 @@ class BuildTree:
         if var_match is not None:
             var = var_match.group(1)
             value = config.get(var) or global_config.get(var)
-            if not value:
+            if value is None:
                 if no_except:
                     return string
                 logging.error(f'Invalid variable "{var}" in {string}')
@@ -118,7 +118,7 @@ class BuildTree:
             raw = m.group(0)
             var = m.group(1)
             value = config.get(var) or global_config.get(var)
-            if not value:
+            if value is None:
                 if no_except:
                     continue
                 logging.error(f'Invalid variable "{var}" in {string}')
