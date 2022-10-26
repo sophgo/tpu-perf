@@ -153,7 +153,8 @@ def run_model(tree, config, name, b, profile_path, bmodel, stat_f, extra):
             logging.warning(
                 f'Profile exists but no GOPs in config.yaml, {config["name"]}')
             row.append('N/A')
-            row.extend(['N/A'] * (2 if option_cmodel_stats else 1))
+            if option_cmodel_stats:
+                row.append('N/A')
         else:
             row.append(f'{calc_mac_util(real_time):.2%}')
             if option_cmodel_stats:
