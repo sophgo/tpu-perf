@@ -261,6 +261,29 @@ blob_info_t *get_input_info(unsigned runner_id, unsigned *num)
     return blobs;
 }
 
+blob_info_t *get_output_info(unsigned runner_id, unsigned *num)
+{
+    if(!globalRunnerInfos.count(runner_id)) {
+        SGLOG(ERROR, "invalid runner_id %d", runner_id);
+        return nullptr;
+    }
+    auto& info = globalRunnerInfos[runner_id];
+    const bm_net_info_t *net_info = info->runner.getNetInfo();
+    *num = net_info->output_num;
+    auto blobs = new blob_info_t[*num];
+    for (int i = 0; i < *num; ++i)
+    {
+        auto &blob = blobs[i];
+        blob.name = net_info->output_names[i];
+        bm_shape_t &s = net_info->stages[0].output_shapes[i];
+        blob.num_dims = s.num_dims;
+        blob.dtypes = (net_info->output_dtypes)[i];
+        memcpy(blob.dims, s.dims, s.num_dims * sizeof(int));
+        blob.scale = (net_info->output_scales)[i];
+    }
+    return blobs;
+}
+
 void release_input_info(unsigned runner_id, blob_info_t *info)
 {
     delete[] info;

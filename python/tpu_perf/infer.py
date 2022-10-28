@@ -97,6 +97,18 @@ class SGInfer:
         self.__lib.release_input_info(self.runner_id, infos)
         return result
 
+    def get_output_info(self):
+        num = ct.c_uint32(0)
+        self.__lib.get_output_info.restype = ct.POINTER(BlobInfo)
+        infos = self.__lib.get_output_info(self.runner_id, ct.byref(num))
+        result = dict()
+        for _, info in zip(range(num.value), infos):
+            result[info.name.decode()] = dict(
+                scale=info.scale,
+                shape=[info.dims[i] for i in range(info.dims_num)])
+        self.__lib.release_input_info(self.runner_id, infos)
+        return result
+
     def __del__(self):
         self.__lib.runner_stop(self.runner_id)
 
