@@ -23,6 +23,7 @@ python3 -m tpu_perf.build --time # To build efficiency test models
 python3 -m tpu_perf.build # To build precision test models
 python3 -m tpu_perf.run # To run efficency test
 python3 -m tpu_perf.precision_benchmark # To run precision benchmark
+python3 -m tpu_perf.make_table #To make table for model zoo test result
 ```
 
 ### config.yaml
@@ -51,7 +52,7 @@ python3 -m tpu_perf.precision_benchmark # To run precision benchmark
 | Field                     | Type      | Usage                                                                                     |
 |---------------------------|-----------|-------------------------------------------------------------------------------------------|
 | precision                 | Optional  | Boolean type. Indicates whether to build precision model when `tpu_perf.build` is called. |
-| fp\_compile\_options    | Optional  | Will use this command to build FP32 bmodel.                                               |
+| fp\_compile\_options      | Optional  | Will use this command to build FP32 bmodel.                                               |
 | cali                      | Optional  | Calibration command. `tpu_perf.build` will do calibrating if this variable exists.        |
 | time\_only\_cali          | Optional  | Calibration command. `tpu_perf.build --time` will do calibrating if this variable exists. |
 | bmnetu\_options           | Optional  | bmnetu compile options. Will do int8 compiling if this variable exists                    |

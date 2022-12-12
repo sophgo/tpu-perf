@@ -40,7 +40,7 @@ setup(
     license='Apache',
     name='tpu_perf',
     url='https://www.sophgo.com/',
-    install_requires=['numpy', 'lmdb', 'protobuf<3.21', 'psutil', 'pyyaml'],
+    install_requires=['numpy', 'lmdb', 'protobuf<3.21', 'psutil', 'pyyaml', 'openpyxl', 'panda'],
     packages=find_packages(),
     include_package_data=True,
     package_data={'tpu_perf': so_list})
