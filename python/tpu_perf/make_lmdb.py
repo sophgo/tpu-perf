@@ -7,13 +7,41 @@ from .subp import sys_memory_size
 from .preprocess import load_plugins
 load_plugins()
 
+from threading import Lock
+
+lock = Lock()
+
+from .preprocess import get_preprocess_method
+
 def build_lmdb(tree, path, config):
-    from .preprocess import get_preprocess_method
-    if 'input' not in config:
-        return
-    data_config = config['input']
-    preprocess = get_preprocess_method(data_config['preprocess'])
-    preprocess(tree, config)
+    try:
+        if 'input' not in config:
+            return
+        data_config = config['input']
+        if 'preprocess' not in data_config:
+            return
+        out_path = config['lmdb_out']
+
+        preprocess = get_preprocess_method(data_config['preprocess'])
+
+        with lock:
+            if os.path.exists(os.path.join(out_path, 'info.yaml')):
+                logging.info(f'{config["name"]} {out_path} already exist')
+                return
+            os.makedirs(out_path, exist_ok=True)
+            info_fn = os.path.join(out_path, 'info.yaml')
+            import yaml
+            with open(info_fn, 'w') as f:
+                yaml.dump(data_config, f)
+
+        preprocess(tree, config)
+    except Exception as err:
+        import shutil
+        shutil.rmtree(out_path, ignore_errors=True)
+        import sys
+        print(sys.exc_info())
+        logging.error(f'{path} quit because of exception, {err}')
+        os._exit(-1)
 
 def main():
     logging.basicConfig(

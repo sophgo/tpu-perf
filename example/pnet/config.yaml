@@ -7,7 +7,7 @@ weight: $(home)/pnet.caffemodel
 int8_model: $(workdir)/$(name)_bmnetc_deploy_int8_unique_top.prototxt
 int8_weight: $(workdir)/$(name)_bmnetc.int8umodel
 
-fp32_compile_options:
+fp_compile_options:
   bmnetc
   --model $(model)
   --weight $(weight)

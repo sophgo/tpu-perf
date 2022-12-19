@@ -1,0 +1,5 @@
+pytest
+pytest-assume
+pyyaml
+prettytable
+onnx-simplifier

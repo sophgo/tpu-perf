@@ -48,6 +48,8 @@ def parse_stats(string):
 def parse_profile(fn):
     with open(fn) as f:
         lines = f.read()
+    if not lines:
+        return
     lines = lines[lines.find('API_END'):]
     data = dict()
     for pair in re.finditer('(\w+) *: *([\d\.]+)', lines):
@@ -80,7 +82,8 @@ def run_model(tree, config, name, b, profile_path, bmodel, stat_f, extra):
 
     if os.path.exists(profile_path):
         info = parse_profile(profile_path)
-        rounds = int(1200 / info['runtime'])
+        if info is not None:
+            rounds = int(1200 / info['runtime'])
     max_rounds = 10000
     if rounds > max_rounds:
         rounds = max_rounds
@@ -129,10 +132,24 @@ def run_model(tree, config, name, b, profile_path, bmodel, stat_f, extra):
 
     # If profile exists, calculate mac & ddr utilization
     if tree.global_config['target'] == 'BM1684':
-        mac_total = 17.6
+        if config['prec'] == 'FP32':
+            mac_total = 2.2
+        elif config['prec'] == 'INT8':
+            mac_total = 17.6
+        else:
+            logging.error(f'Invalid prec type "{config["prec"]}" for BM1684')
+            raise RuntimeError('Invalid prec')
         ddr_total = 32
     elif tree.global_config['target'] == 'BM1684X':
-        mac_total = 32
+        if config['prec'] == 'FP32':
+            mac_total = 2
+        elif config['prec'] == 'FP16' or config['prec'] == 'BF16':
+            mac_total = 16
+        elif config['prec'] == 'INT8':
+            mac_total = 32
+        else:
+            logging.error(f'Invalid prec type "{config["prec"]}" for BM1684')
+            raise RuntimeError('Invalid prec')
         ddr_total = 64
     else:
         logging.error(f'Invalid target {tree.global_config["target"]}')
@@ -164,12 +181,15 @@ def run_model(tree, config, name, b, profile_path, bmodel, stat_f, extra):
         if option_cmodel_stats:
             row.append(f'{calc_ddr_bandwidth(est_time):.2%}')
     else:
-        row.extend(['N/A'] * (6 if option_cmodel_stats else 3))
+        ext = ['N/A'] * (5 if option_cmodel_stats else 2)
+        cpu_index = 2 if option_cmodel_stats else 1
+        ext.insert(cpu_index, f'{cpu_percent:.2%}')
+        row.extend(ext)
 
     stat_f.writerow(row)
 
-def run_mlir(tree, path, config, stat_f, extra):
-    workdir = config['workdir']
+def run_mlir(tree, path, raw_config, stat_f, extra):
+    workdir = raw_config['workdir']
     for dirpath, dirnames, filenames in os.walk(workdir):
         for fn in filenames:
             if not fn.endswith('.bmodel'):
@@ -177,8 +197,10 @@ def run_mlir(tree, path, config, stat_f, extra):
             name = os.path.splitext(fn)[0]
             bmodel = os.path.join(dirpath, fn)
             profile_path = bmodel + '.compiler_profile_0.txt'
-            config = config.copy()
+            config = raw_config.copy()
             config['name'] = name
+            if 'prec' not in config:
+                config['prec'] = 'INT8' if 'int8' in name else 'FP32'
             run_model(
                 tree, config,
                 name,
@@ -195,23 +217,24 @@ def run_nntc(tree, path, raw_config, stat_f, extra):
     profile_fn = 'compiler_profile_0.dat' \
         if tree.global_config['target'] == 'BM1684' else \
         'compiler_profile_0.txt'
-    fp32_loops = raw_config.get('fp32_loops') or \
-        tree.global_config.get('fp32_loops') or [dict()]
-    for loop in fp32_loops:
-        if 'fp32_compile_options' not in raw_config:
-            # Skip fp32 bmrt test
+    fp_loops = raw_config.get('fp_loops') or \
+        tree.global_config.get('fp_loops') or [dict()]
+    for loop in fp_loops:
+        if 'fp_compile_options' not in raw_config:
+            # Skip fp bmrt test
             break
         config = dict_override(raw_config, loop)
-        batch_sizes = config.get('fp32_batch_sizes', [1])
+        batch_sizes = config.get('fp_batch_sizes', [1])
         for b in batch_sizes:
-            name = config.get('fp32_outdir_template', '{}b.fp32.compilation').format(b)
+            name = config.get('fp_outdir_template', '{}b.fp.compilation').format(b)
             bmodel_dir = os.path.join(workdir, name)
             bmodel = os.path.join(bmodel_dir, 'compilation.bmodel')
             if not os.path.exists(bmodel):
                 logging.warning(f'{bmodel} does not exist')
                 continue
             profile_path = os.path.join(bmodel_dir, profile_fn)
-            config['prec'] = 'FP32'
+            if 'prec' not in config:
+                config['prec'] = 'FP32'
             run_model(
                 tree, config, name, b, profile_path,
                 bmodel, stat_f, extra)
@@ -231,20 +254,26 @@ def run_nntc(tree, path, raw_config, stat_f, extra):
                 logging.warning(f'{bmodel} does not exist')
                 continue
             profile_path = os.path.join(bmodel_dir, profile_fn)
-            config['prec'] = 'INT8'
+            if 'prec' not in config:
+                config['prec'] = 'INT8'
             run_model(
                 tree, config, name, b, profile_path,
                 bmodel, stat_f, extra)
 
 def collect_nntc_headers(tree, config):
     extra = set(['prec'])
-    for loop in config.get('fp32_loops', [dict()]):
+    for loop in config.get('fp_loops', [dict()]):
         for k in loop.keys():
             extra.add(k)
     for loop in config.get('int8_loops', [dict()]):
         for k in loop.keys():
             extra.add(k)
-    return set(k for k in extra if 'template' not in k)
+    def skip_if(k):
+        if 'template' in k:
+            return True
+        if k in {'build_env'}:
+            return True
+    return set(k for k in extra if not skip_if(k))
 
 def main():
     logging.basicConfig(
@@ -281,8 +310,8 @@ def main():
                 *extra,
                 'shape',
                 'gops',
-                'time',
-                'cmodel_estimated_time',
+                'time(ms)',
+                'cmodel_estimated_time(ms)',
                 'mac_utilization',
                 'cpu_usage',
                 'cmodel_estimated_mac_utilization',
@@ -294,7 +323,7 @@ def main():
                 *extra,
                 'shape',
                 'gops',
-                'time',
+                'time(ms)',
                 'mac_utilization',
                 'cpu_usage',
                 'ddr_utilization'])
