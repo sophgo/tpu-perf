@@ -85,9 +85,11 @@ def run_model(tree, config, name, b, profile_path, bmodel, stat_f, extra):
         if info is not None:
             rounds = int(1200 / info['runtime'])
     max_rounds = 10000
+    min_rounds = 1
     if rounds > max_rounds:
         rounds = max_rounds
-
+    if rounds < min_rounds:
+        rounds = min_rounds
     full_name = f'{config["name"]} {name}'
     logging.info(f'Run {rounds} times for {full_name}')
 
