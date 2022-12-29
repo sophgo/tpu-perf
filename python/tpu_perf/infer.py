@@ -54,6 +54,7 @@ class BlobInfo(ct.Structure):
     _fields_ = [
         ("name", ct.c_char_p),
         ("dims_num", ct.c_int),
+        ("dtype", ct.c_int),
         ("dims", ct.c_int * 8),
         ("scale", ct.c_float)]
 
@@ -93,6 +94,7 @@ class SGInfer:
         for _, info in zip(range(num.value), infos):
             result[info.name.decode()] = dict(
                 scale=info.scale,
+                dtype=info.dtype,
                 shape=[info.dims[i] for i in range(info.dims_num)])
         self.__lib.release_input_info(self.runner_id, infos)
         return result
@@ -105,6 +107,7 @@ class SGInfer:
         for _, info in zip(range(num.value), infos):
             result[info.name.decode()] = dict(
                 scale=info.scale,
+                dtype=info.dtype,
                 shape=[info.dims[i] for i in range(info.dims_num)])
         self.__lib.release_input_info(self.runner_id, infos)
         return result

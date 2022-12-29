@@ -41,6 +41,7 @@ unsigned int runner_release_output(unsigned int output_num, const tensor_data_t 
 struct blob_info_t {
     const char *name;
     int num_dims;
+    int dtype;
     int dims[BM_MAX_DIMS_NUM];
     float scale;
 };
