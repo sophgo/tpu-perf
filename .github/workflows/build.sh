@@ -7,6 +7,7 @@ set -eE
 
 DEBIAN_FRONTEND=noninteractive
 [ "$EUID" -eq 0 ] || sudo="sudo -E"
+$sudo apt-get update
 $sudo apt-get install -y libhdf5-dev libatlas-base-dev libboost-system-dev
 $sudo apt-get install -y g++-aarch64-linux-gnu gcc-aarch64-linux-gnu
 
