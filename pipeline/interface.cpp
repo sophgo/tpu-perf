@@ -255,6 +255,7 @@ blob_info_t *get_input_info(unsigned runner_id, unsigned *num)
         blob.name = net_info->input_names[i];
         bm_shape_t &s = net_info->stages[0].input_shapes[i];
         blob.num_dims = s.num_dims;
+        blob.dtype = (net_info->input_dtypes)[i];
         memcpy(blob.dims, s.dims, s.num_dims * sizeof(int));
         blob.scale = net_info->input_scales[i];
     }
@@ -277,6 +278,7 @@ blob_info_t *get_output_info(unsigned runner_id, unsigned *num)
         blob.name = net_info->output_names[i];
         bm_shape_t &s = net_info->stages[0].output_shapes[i];
         blob.num_dims = s.num_dims;
+        blob.dtype = (net_info->output_dtypes)[i];
         memcpy(blob.dims, s.dims, s.num_dims * sizeof(int));
         blob.scale = (net_info->output_scales)[i];
     }
