@@ -184,13 +184,17 @@ class BuildTree:
             context = self.expand_all_variables(
                 dict(home=p), context, shallow=True, no_except=True)
             break
+        fnlist=[]
         for fn in os.listdir(path):
             if not fn.endswith('config.yaml'):
                 continue
             fn = os.path.join(path, fn)
-            if not os.path.isfile(fn):
+            fnlist.append(fn)
+        fnlist.sort()
+        for cf in fnlist:
+            if not os.path.isfile(cf):
                 continue
-            for ret in self._read_dir(fn, context):
+            for ret in self._read_dir(cf, context):
                 yield ret
 
     def hash_name(self, config):
