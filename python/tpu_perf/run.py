@@ -200,6 +200,8 @@ def run_mlir(tree, path, raw_config, stat_f, extra):
         for fn in filenames:
             if not fn.endswith('.bmodel'):
                 continue
+            if fn.find('compilation') >= 0:
+                continue
             name = os.path.splitext(fn)[0]
             bmodel = os.path.join(dirpath, fn)
             profile_path = bmodel + '.compiler_profile_0.txt'
