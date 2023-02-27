@@ -310,12 +310,14 @@ def main():
         for path, config in tree.walk():
             for k in collect_nntc_headers(tree, config):
                 extra.add(k)
+        l = list(extra)
+        l.sort()
     with open(stat_fn, 'w') as f:
         csv_f = csv.writer(f)
         if option_cmodel_stats:
             csv_f.writerow([
                 'name',
-                *extra,
+                *l,
                 'shape',
                 'gops',
                 'time(ms)',
@@ -328,7 +330,7 @@ def main():
         else:
             csv_f.writerow([
                 'name',
-                *extra,
+                *l,
                 'shape',
                 'gops',
                 'time(ms)',
@@ -337,7 +339,7 @@ def main():
                 'ddr_utilization'])
 
         for path, config in tree.walk():
-            run_func(tree, path, config, csv_f, extra)
+            run_func(tree, path, config, csv_f, l)
 
 if __name__ == '__main__':
     main()

@@ -48,7 +48,7 @@ def build_mlir(tree, path, config):
     if cali_key in config:
         logging.info(f'Calibrating MLIR {name}...')
         cali_cmd = tree.expand_variables(config, config[cali_key])
-        pool.put('cali_key', cali_cmd)
+        pool.put(cali_key, cali_cmd)
         pool.wait()
         logging.info(f'Calibrate MLIR {name} done')
 
