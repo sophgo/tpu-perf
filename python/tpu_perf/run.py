@@ -200,6 +200,8 @@ def run_mlir(tree, path, raw_config, stat_f, extra):
         for fn in filenames:
             if not fn.endswith('.bmodel'):
                 continue
+            if fn.find('compilation') >= 0:
+                continue
             name = os.path.splitext(fn)[0]
             bmodel = os.path.join(dirpath, fn)
             profile_path = bmodel + '.compiler_profile_0.txt'
@@ -308,6 +310,8 @@ def main():
         for path, config in tree.walk():
             for k in collect_nntc_headers(tree, config):
                 extra.add(k)
+    extra = list(extra)
+    extra.sort()
     with open(stat_fn, 'w') as f:
         csv_f = csv.writer(f)
         if option_cmodel_stats:
