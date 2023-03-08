@@ -4,6 +4,8 @@ import os
 
 def load_plugins(name):
     for dirpath, dirnames, filenames in os.walk('.'):
+        if len(dirpath) >= 2 and dirpath[2] == '.':
+            continue
         for dn in dirnames:
             if dn != name:
                 continue
