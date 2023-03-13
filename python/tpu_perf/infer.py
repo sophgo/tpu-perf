@@ -42,7 +42,7 @@ class SGTensor(ct.Structure):
         #data_ptr = ct.cast(self.data, ct.POINTER(ct.c_byte*mem_size)).contents
         buffer = data_ptr
         return np.frombuffer(buffer, dtype = dtype).reshape(shape)
-        
+
     def from_numpy(self, data):
         self.dims = ct.c_uint32(len(data.shape))
         for i in range(self.dims):

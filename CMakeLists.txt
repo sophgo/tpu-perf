@@ -15,6 +15,15 @@ target_include_directories(
 target_compile_features(pipeline PUBLIC cxx_std_11)
 target_link_libraries(pipeline PUBLIC ${sg_LIBRARIES})
 
+find_package(Threads REQUIRED)
+file(GLOB benchmark_srcs benchmark/*.cpp)
+add_library(benchmark SHARED ${benchmark_srcs} ${tool_srcs})
+target_include_directories(
+    benchmark PUBLIC
+    ${CMAKE_SOURCE_DIR}/benchmark)
+target_compile_features(benchmark PUBLIC cxx_std_11)
+target_link_libraries(benchmark PUBLIC ${sg_LIBRARIES} Threads::Threads)
+
 set(proto_srcs
     ${CMAKE_BINARY_DIR}/blob_pb2.py
     ${CMAKE_BINARY_DIR}/blob.pb.cc)

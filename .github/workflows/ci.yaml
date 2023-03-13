@@ -3,7 +3,7 @@ name: Build And Test
 on:
   push:
   pull_request:
-    branches: [main]
+    branches: [multi_devcice]
 
 jobs:
   build:
