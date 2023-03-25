@@ -121,6 +121,7 @@ def run_model(tree, config, name, b, profile_path, bmodel, stat_f, extra):
         pool.procs.clear()
     except RuntimeError:
         logging.error(f'Runtime test {full_name} failed')
+        raise
 
     log_fn = os.path.join(workdir, f'{title}.log')
     with open(log_fn) as f:
