@@ -44,6 +44,7 @@ class BuildTree:
         if args.outdir:
             outdir = args.outdir
         global_config['outdir'] = os.path.join(root, outdir)
+        os.makedirs(global_config['outdir'], exist_ok=True)
 
         self.cases = []
         if not args.full:
