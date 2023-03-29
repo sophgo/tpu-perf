@@ -2,6 +2,13 @@ import logging
 import importlib
 import os
 
+def str2list(v):
+    files = v.split(",")
+    files = [s.strip() for s in files]
+    while files.count('') > 0:
+        files.remove('')
+    return files
+
 def load_plugins(name):
     for dirpath, dirnames, filenames in os.walk('.'):
         if len(dirpath) >= 2 and dirpath[2] == '.':

@@ -6,10 +6,15 @@ import psutil
 import sys
 import time
 import logging
+
 from .buildtree import check_buildtree, BuildTree
 from .subp import CommandExecutor
 from .util import *
+from .benchmark import BenchmarkInfer
 
+perf_bench = BenchmarkInfer()
+
+option_use_all_devices = False
 option_cmodel_stats = False
 
 class Average:
@@ -92,7 +97,7 @@ def run_model(tree, config, name, b, profile_path, bmodel, stat_f, extra):
     if 'time_rounds' in config:
         rounds = math.ceil(config['time_rounds'] / b)
     elif rounds is None:
-        rounds = 2000 / b
+        rounds = int(2000 / b)
 
     full_name = f'{config["name"]} {name}'
     logging.info(f'Run {rounds} times for {full_name}')
@@ -106,36 +111,47 @@ def run_model(tree, config, name, b, profile_path, bmodel, stat_f, extra):
             title,
             [*cmd_opts, '--context', bmodel_dir],
             shell=False)
+        try:
+            pool.fire()
+            pid = pool.pipes[0].pid
+            p = psutil.Process(pid)
+            cpu_percent = p.cpu_percent(interval=1) / 100
+            pool.drain()
+            pool.procs.clear()
+        except RuntimeError:
+            logging.error(f'Runtime test {full_name} failed')
+
+        log_fn = os.path.join(workdir, f'{title}.log')
+        with open(log_fn) as f:
+            stats = parse_stats(f.read())
+
+        from math import nan
+        real_time = stats['calculate'] * 1000 if 'calculate' in stats else nan
+        if 'calculate_times' in iter_opt:
+            real_time /= rounds
+        throughput = 1000 / real_time
     else:
         logging.info(f'Runtime test {full_name} without reference')
-        pool.put(
-            title,
-            [*cmd_opts, '--bmodel', bmodel],
-            shell=False)
-    try:
-        pool.fire()
-        pid = pool.pipes[0].pid
-        p = psutil.Process(pid)
-        cpu_percent = p.cpu_percent(interval=1) / 100
-        pool.drain()
-        pool.procs.clear()
-    except RuntimeError:
-        logging.error(f'Runtime test {full_name} failed')
-        raise
+        # pool.put(
+        #     title,
+        #     [*cmd_opts, '--bmodel', bmodel],
+        #     shell=False)
+        devs = perf_bench.available_devices() if option_use_all_devices else tree.global_config['devices']
 
-    log_fn = os.path.join(workdir, f'{title}.log')
-    with open(log_fn) as f:
-        stats = parse_stats(f.read())
-    from math import nan
-    real_time = stats['calculate'] * 1000 if 'calculate' in stats else nan
-    if 'calculate_times' in iter_opt:
-        real_time /= rounds
+        res = perf_bench.getPerformace(rounds, bmodel, devs)
+        real_time = res["avg_latency"]
+        throughput = res["throughput"]
+        stats = {}
+        stats["shape"] = res["shape"]
+        cpu_percent = res["cpu_usage"]
+
     row = [
         config['name'],
         *[config.get(k, '') for k in extra],
         stats['shape'],
         format_float(config['gops'] * b) if 'gops' in config else 'N/A',
-        format_float(real_time)]
+        format_float(real_time),
+        format_float(throughput)]
 
     # If profile exists, calculate mac & ddr utilization
     if tree.global_config['target'] == 'BM1684':
@@ -183,14 +199,15 @@ def run_model(tree, config, name, b, profile_path, bmodel, stat_f, extra):
             row.append(f'{calc_mac_util(real_time):.2%}')
             if option_cmodel_stats:
                 row.append(f'{calc_mac_util(est_time):.2%}')
-        row.insert(cpu_index, f'{cpu_percent:.2%}')
+        row.insert(cpu_index, f'{cpu_percent:.2%}' if cpu_percent else "N/A")
         row.append(f'{calc_ddr_bandwidth(real_time):.2%}')
         if option_cmodel_stats:
             row.append(f'{calc_ddr_bandwidth(est_time):.2%}')
     else:
         ext = ['N/A'] * (5 if option_cmodel_stats else 2)
         cpu_index = 2 if option_cmodel_stats else 1
-        ext.insert(cpu_index, f'{cpu_percent:.2%}')
+        ext.insert(cpu_index, f'{cpu_percent:.2%}' if cpu_percent is not None \
+                                                    else "N/A")
         row.extend(ext)
 
     stat_f.writerow(row)
@@ -222,7 +239,6 @@ def run_nntc(tree, path, raw_config, stat_f, extra):
     if not raw_config.get('time', True):
         return
     workdir = raw_config['workdir']
-
     profile_fn = 'compiler_profile_0.dat' \
         if tree.global_config['target'] == 'BM1684' else \
         'compiler_profile_0.txt'
@@ -293,9 +309,12 @@ def main():
     parser = argparse.ArgumentParser(description='tpu-perf benchmark tool')
     BuildTree.add_arguments(parser)
     parser.add_argument('--cmodel', action='store_true')
+    parser.add_argument('--use_all_devices', action='store_true', help = "if set to true, will use all devices")
     args = parser.parse_args()
     global option_cmodel_stats
     option_cmodel_stats = args.cmodel
+    global option_use_all_devices
+    option_use_all_devices = args.use_all_devices
 
     if not check_buildtree():
         sys.exit(1)
@@ -334,6 +353,7 @@ def main():
                 'shape',
                 'gops',
                 'time(ms)',
+                'throughput(fps)',
                 'mac_utilization',
                 'cpu_usage',
                 'ddr_utilization'])

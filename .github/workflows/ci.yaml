@@ -2,6 +2,8 @@ name: Build And Test
 
 on:
   push:
+    tags: 
+      - v*
   pull_request:
     branches: [main]
 
@@ -32,8 +34,9 @@ jobs:
           path: example/output/pnet/*.log
 
       - name: Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         uses: softprops/action-gh-release@v1
-        if: startsWith(github.ref, 'refs/tags/')
         with:
           files: |
             python/dist/*.whl
