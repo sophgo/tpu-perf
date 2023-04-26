@@ -6,6 +6,7 @@ import psutil
 import sys
 import time
 import logging
+import argparse
 from .buildtree import check_buildtree, BuildTree
 from .subp import CommandExecutor
 from .util import *
@@ -64,6 +65,7 @@ def format_float(v):
         return f'{v:.03e}'
 
 def run_model(tree, config, name, b, profile_path, bmodel, stat_f, extra):
+    ok = True
     title = f'run.{name}'
     workdir = config['workdir']
     env = [
@@ -71,7 +73,6 @@ def run_model(tree, config, name, b, profile_path, bmodel, stat_f, extra):
         for v in config.get('run_env', [])]
     env.append('BMRUNTIME_PROFILE_OUT_DIR={b}b.profiledata')
     pool = CommandExecutor(workdir, env)
-    rt_cmp = config.get('runtime_cmp')
     iter_opt = tree.global_config.get('iter_opt', '--loopnum')
     if 'iter_opt' in config:
         iter_opt = config['iter_opt']
@@ -95,23 +96,28 @@ def run_model(tree, config, name, b, profile_path, bmodel, stat_f, extra):
         rounds = 2000 / b
 
     full_name = f'{config["name"]} {name}'
-    logging.info(f'Run {rounds} times for {full_name}')
 
     ref_fn = os.path.join(bmodel_dir, 'output_ref_data.dat')
     dev = tree.global_config['devices'][0]
     cmd_opts = ['bmrt_test', iter_opt, str(rounds), '--dev', str(dev)]
-    if rt_cmp and os.path.exists(ref_fn) and os.path.getsize(ref_fn):
-        logging.info(f'Runtime test {full_name}')
+    if os.path.exists(ref_fn) and os.path.getsize(ref_fn):
+        logging.info(f'Runtime compare {full_name}')
         pool.put(
-            title,
+            'compare-' + title,
             [*cmd_opts, '--context', bmodel_dir],
             shell=False)
+        try:
+            pool.wait()
+        except:
+            ok = False
+            logging.error(f'Runtime compare {full_name} {bmodel_dir} failed')
     else:
-        logging.info(f'Runtime test {full_name} without reference')
-        pool.put(
-            title,
-            [*cmd_opts, '--bmodel', bmodel],
-            shell=False)
+        logging.warning(f'{full_name} has no reference data')
+    logging.info(f'Runtime test {full_name} x{rounds}')
+    pool.put(
+        title,
+        [*cmd_opts, '--bmodel', bmodel],
+        shell=False)
     try:
         pool.fire()
         pid = pool.pipes[0].pid
@@ -194,31 +200,56 @@ def run_model(tree, config, name, b, profile_path, bmodel, stat_f, extra):
         row.extend(ext)
 
     stat_f.writerow(row)
+    return ok
 
 def run_mlir(tree, path, raw_config, stat_f, extra):
     workdir = raw_config['workdir']
-    for dirpath, dirnames, filenames in os.walk(workdir):
-        for fn in filenames:
-            if not fn.endswith('.bmodel'):
-                continue
-            if fn.find('compilation') >= 0:
-                continue
-            name = os.path.splitext(fn)[0]
-            bmodel = os.path.join(dirpath, fn)
-            profile_path = bmodel + '.compiler_profile_0.txt'
-            config = raw_config.copy()
-            config['name'] = name
-            if 'prec' not in config:
-                config['prec'] = 'INT8' if 'int8' in name else 'FP32'
-            run_model(
-                tree, config,
-                name,
-                1,
-                profile_path,
-                bmodel,
-                stat_f, extra)
+    deploies = raw_config.get('deploy', [])
+    if not deploies:
+        return
+
+    parser = argparse.ArgumentParser(description='MLIR deploy')
+    parser.add_argument(
+        "--quantize", default="F32",
+        type=str.upper, choices=['F32', 'BF16', 'F16', 'INT8', 'QDQ'],
+        help="set default qauntization type: F32/BF16/F16/INT8")
+    parser.add_argument(
+        "--chip", required=True, type=str.lower,
+        choices=['bm1686', 'bm1684x', 'bm1684',
+            'cv183x', 'cv182x', 'cv181x', 'cv180x'],
+        help="chip platform name")
+    parser.add_argument("--model", required=True, help='output model')
+    parser.add_argument(
+        "--asymmetric", action='store_true',
+        help="do INT8 asymmetric quantization")
+
+    ok = True
+    for deploy in deploies:
+        deploy = tree.expand_variables(raw_config, deploy)
+        args, _ = parser.parse_known_args(deploy.split())
+        profile_path = args.model + '.compiler_profile_0.txt'
+        bmodel = args.model.replace('.bmodel', '/compilation.bmodel')
+        prec = args.quantize
+        if re.match('^F\d+$', prec):
+            prec = prec.replace('F', 'FP')
+        raw_config['prec'] = prec
+        name = prec
+        if args.asymmetric:
+            name += '-asym'
+
+        ok = run_model(
+            tree, raw_config,
+            name,
+            1,
+            profile_path,
+            bmodel,
+            stat_f, extra) and ok
+
+    return ok
 
 def run_nntc(tree, path, raw_config, stat_f, extra):
+    ok = True
+
     if not raw_config.get('time', True):
         return
     workdir = raw_config['workdir']
@@ -244,9 +275,9 @@ def run_nntc(tree, path, raw_config, stat_f, extra):
             profile_path = os.path.join(bmodel_dir, profile_fn)
             if 'prec' not in config:
                 config['prec'] = 'FP32'
-            run_model(
+            ok = run_model(
                 tree, config, name, b, profile_path,
-                bmodel, stat_f, extra)
+                bmodel, stat_f, extra) and ok
 
     int8_loops = raw_config.get('int8_loops') or \
         tree.global_config.get('int8_loops') or [dict()]
@@ -265,12 +296,14 @@ def run_nntc(tree, path, raw_config, stat_f, extra):
             profile_path = os.path.join(bmodel_dir, profile_fn)
             if 'prec' not in config:
                 config['prec'] = 'INT8'
-            run_model(
+            ok = run_model(
                 tree, config, name, b, profile_path,
-                bmodel, stat_f, extra)
+                bmodel, stat_f, extra) and ok
+
+    return ok
 
 def collect_nntc_headers(tree, config):
-    extra = set(['prec'])
+    extra = set()
     for loop in config.get('fp_loops', [dict()]):
         for k in loop.keys():
             extra.add(k)
@@ -289,7 +322,6 @@ def main():
         level=logging.INFO,
         format='[%(levelname)s %(filename)s:%(lineno)d] %(message)s')
 
-    import argparse
     parser = argparse.ArgumentParser(description='tpu-perf benchmark tool')
     BuildTree.add_arguments(parser)
     parser.add_argument('--cmodel', action='store_true')
@@ -302,7 +334,7 @@ def main():
 
     tree = BuildTree(os.path.abspath('.'), args)
     stat_fn = os.path.join(tree.global_config['outdir'], 'stats.csv')
-    extra = set()
+    extra = set(['prec'])
     if args.mlir:
         run_func = run_mlir
     else:
@@ -312,6 +344,7 @@ def main():
                 extra.add(k)
     extra = list(extra)
     extra.sort()
+    ok = True
     with open(stat_fn, 'w') as f:
         csv_f = csv.writer(f)
         if option_cmodel_stats:
@@ -339,7 +372,9 @@ def main():
                 'ddr_utilization'])
 
         for path, config in tree.walk():
-            run_func(tree, path, config, csv_f, extra)
+            ok = ok and run_func(tree, path, config, csv_f, extra)
+
+    sys.exit(255 if not ok else 0)
 
 if __name__ == '__main__':
     main()

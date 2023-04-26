@@ -24,6 +24,17 @@ def dict_override(a, b):
         logging.error(f'\"{b}\" is not a dict')
         raise ValueError('Invalid argument')
     for k, v in b.items():
+        if k.startswith('+'):
+            real_key = k[1:]
+            va = a.get(real_key, [])
+            if type(va) != list:
+                logging.error(f'{real_key} in {a} is not a list')
+                raise ValueError('Invalid argument')
+            if type(v) != list:
+                logging.error(f'{real_key} in {b} is not a list')
+                raise ValueError('Invalid argument')
+            r[real_key] = va + v
+            continue
         r[k] = v
     return r
 
