@@ -24,7 +24,7 @@ wget -O /tmp/$protoc_zip \
 unzip -o -d /tmp/ /tmp/$protoc_zip
 PATH=$PATH:/tmp/bin
 
-rm -v $DIR/python/dist/*
+rm -vf $DIR/python/dist/*
 
 # aarch64
 mkdir -p $DIR/aarch64_build
