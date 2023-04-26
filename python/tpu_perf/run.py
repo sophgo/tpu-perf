@@ -113,7 +113,7 @@ def run_model(tree, config, name, b, profile_path, bmodel, stat_f, extra):
             logging.error(f'Runtime compare {full_name} {bmodel_dir} failed')
     else:
         logging.warning(f'{full_name} has no reference data')
-    logging.info(f'Runtime test {full_name} x{rounds}')
+    logging.info(f'Runtime test {full_name} x{int(rounds)}')
     pool.put(
         title,
         [*cmd_opts, '--bmodel', bmodel],
@@ -242,7 +242,7 @@ def run_mlir(tree, path, raw_config, stat_f, extra):
             name,
             1,
             profile_path,
-            bmodel,
+            bmodel if os.path.exists(bmodel) else args.model,
             stat_f, extra) and ok
 
     return ok
