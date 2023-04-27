@@ -167,46 +167,44 @@ def run_model(tree, config, name, b, profile_path, bmodel, stat_f, extra):
     else:
         logging.error(f'Invalid target {tree.global_config["target"]}')
         raise RuntimeError('Invalid target')
+    if 'gops' in config:
+        calc_mac_util = lambda t: config['gops'] * b / t / mac_total
+        row.append(f'{calc_mac_util(real_time):.2%}')
+    else:
+        logging.warning(f'No GOPs in config.yaml, {config["name"]}')
+        row.append('N/A')
     if info is not None:
         s2l = info['S2L']
         l2s = info['L2S']
         s2s = info['S2S']
-        calc_mac_util = lambda t: config['gops'] * b / t / mac_total
         calc_ddr_bandwidth = lambda t: \
             (s2l + l2s + s2s * 2) / t * 1000 / 1024**3 / ddr_total
 
         est_time = info['runtime']
         if option_cmodel_stats:
             row.append(format_float(est_time))
-        cpu_index = len(row) + 1
-        if 'gops' not in config:
-            logging.warning(
-                f'Profile exists but no GOPs in config.yaml, {config["name"]}')
-            row.append('N/A')
-            if option_cmodel_stats:
+            if 'gops' not in config:
                 row.append('N/A')
-        else:
-            row.append(f'{calc_mac_util(real_time):.2%}')
-            if option_cmodel_stats:
+            else:
                 row.append(f'{calc_mac_util(est_time):.2%}')
-        row.insert(cpu_index, f'{cpu_percent:.2%}')
         row.append(f'{calc_ddr_bandwidth(real_time):.2%}')
         if option_cmodel_stats:
             row.append(f'{calc_ddr_bandwidth(est_time):.2%}')
     else:
-        ext = ['N/A'] * (5 if option_cmodel_stats else 2)
-        cpu_index = 2 if option_cmodel_stats else 1
-        ext.insert(cpu_index, f'{cpu_percent:.2%}')
+        ext = ['N/A'] * (4 if option_cmodel_stats else 1)
         row.extend(ext)
+    row.append(f'{cpu_percent:.2%}')
 
     stat_f.writerow(row)
     return ok
 
 def run_mlir(tree, path, raw_config, stat_f, extra):
+    ok = True
+
     workdir = raw_config['workdir']
     deploies = raw_config.get('deploy', [])
     if not deploies:
-        return
+        return ok
 
     parser = argparse.ArgumentParser(description='MLIR deploy')
     parser.add_argument(
@@ -223,7 +221,6 @@ def run_mlir(tree, path, raw_config, stat_f, extra):
         "--asymmetric", action='store_true',
         help="do INT8 asymmetric quantization")
 
-    ok = True
     for deploy in deploies:
         deploy = tree.expand_variables(raw_config, deploy)
         args, _ = parser.parse_known_args(deploy.split())
@@ -251,7 +248,7 @@ def run_nntc(tree, path, raw_config, stat_f, extra):
     ok = True
 
     if not raw_config.get('time', True):
-        return
+        return ok
     workdir = raw_config['workdir']
 
     profile_fn = 'compiler_profile_0.dat' \
@@ -354,12 +351,12 @@ def main():
                 'shape',
                 'gops',
                 'time(ms)',
-                'cmodel_estimated_time(ms)',
                 'mac_utilization',
-                'cpu_usage',
-                'cmodel_estimated_mac_utilization',
                 'ddr_utilization',
-                'cmodel_estimated_ddr_bandwidth'])
+                'cmodel_estimated_time(ms)',
+                'cmodel_estimated_mac_utilization',
+                'cmodel_estimated_ddr_bandwidth',
+                'cpu_usage'])
         else:
             csv_f.writerow([
                 'name',
@@ -368,8 +365,8 @@ def main():
                 'gops',
                 'time(ms)',
                 'mac_utilization',
-                'cpu_usage',
-                'ddr_utilization'])
+                'ddr_utilization',
+                'cpu_usage'])
 
         for path, config in tree.walk():
             ok = ok and run_func(tree, path, config, csv_f, extra)
