@@ -72,7 +72,7 @@ def run_model(tree, config, name, b, profile_path, bmodel, stat_f, extra):
         tree.expand_variables(config, v)
         for v in config.get('run_env', [])]
     env.append('BMRUNTIME_PROFILE_OUT_DIR={b}b.profiledata')
-    pool = CommandExecutor(workdir, env)
+    pool = CommandExecutor(workdir, env, verbose=True)
     iter_opt = tree.global_config.get('iter_opt', '--loopnum')
     if 'iter_opt' in config:
         iter_opt = config['iter_opt']

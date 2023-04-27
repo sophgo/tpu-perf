@@ -26,7 +26,8 @@ def env_list_to_dict(env, base=os.environ):
     return env_dict
 
 class CommandExecutor:
-    def __init__(self, cwd, env, memory_hint = None):
+    def __init__(self, cwd, env, memory_hint = None, verbose=False):
+        self.verbose = verbose
         if memory_hint is None:
             memory_hint = 1024 * 1024 * 7
         self.env = env_list_to_dict(env)
@@ -78,7 +79,11 @@ class CommandExecutor:
             ret = p.wait()
             log.close()
             if ret != 0:
-                logging.error(f'Command failed, please check {log_fn}')
+                if self.verbose:
+                    with open(log_fn) as f:
+                        logging.error(f'Command failed-------------->\n{f.read()}')
+                else:
+                    logging.error(f'Command failed, please check {log_fn}')
                 raise RuntimeError('Command failed')
 
     def wait(self):
