@@ -100,19 +100,23 @@ def run_model(tree, config, name, b, profile_path, bmodel, stat_f, extra):
     ref_fn = os.path.join(bmodel_dir, 'output_ref_data.dat')
     dev = tree.global_config['devices'][0]
     cmd_opts = ['bmrt_test', iter_opt, str(rounds), '--dev', str(dev)]
-    if os.path.exists(ref_fn) and os.path.getsize(ref_fn):
-        logging.info(f'Runtime compare {full_name}')
-        pool.put(
-            'compare-' + title,
-            [*cmd_opts, '--context', bmodel_dir],
-            shell=False)
-        try:
-            pool.wait()
-        except:
-            ok = False
-            logging.error(f'Runtime compare {full_name} {bmodel_dir} failed')
+    rt_cmp = config.get('runtime_cmp', True)
+    if rt_cmp:
+        if os.path.exists(ref_fn) and os.path.getsize(ref_fn):
+            logging.info(f'Runtime compare {full_name}')
+            pool.put(
+                'compare-' + title,
+                [*cmd_opts, '--context', bmodel_dir],
+                shell=False)
+            try:
+                pool.wait()
+            except:
+                ok = False
+                logging.error(f'Runtime compare {full_name} {bmodel_dir} failed')
+        else:
+            logging.warning(f'{full_name} has no reference data')
     else:
-        logging.warning(f'{full_name} has no reference data')
+        logging.warning(f'Runtime compare {full_name} skpped')
     logging.info(f'Runtime test {full_name} x{int(rounds)}')
     pool.put(
         title,
