@@ -225,11 +225,16 @@ def run_mlir(tree, path, raw_config, stat_f, extra):
         "--asymmetric", action='store_true',
         help="do INT8 asymmetric quantization")
 
-    for deploy in deploies:
+    for i, deploy in enumerate(deploies):
+        title = f'mlir_deploy.{i}'
+        cwd = os.path.join(workdir, title)
         deploy = tree.expand_variables(raw_config, deploy)
         args, _ = parser.parse_known_args(deploy.split())
-        profile_path = args.model + '.compiler_profile_0.txt'
         bmodel = args.model.replace('.bmodel', '/compilation.bmodel')
+        if args.chip == 'bm1684':
+            profile_path = os.path.join(cwd, 'compiler_profile_0.dat')
+        else:
+            profile_path = args.model + '.compiler_profile_0.txt'
         prec = args.quantize
         if re.match('^F\d+$', prec):
             prec = prec.replace('F', 'FP')
