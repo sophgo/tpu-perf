@@ -26,7 +26,47 @@ def replace_shape_batch(cmd, batch_size):
 
 option_time_only = False
 
+import glob
+from functools import reduce
+def files_equal(inputs, output):
+    if not os.path.exists(output):
+        return False
+    input_size = reduce(lambda acc, x: acc + os.stat(x).st_size, inputs, 0)
+    output_size = os.stat(output).st_size
+    return input_size == output_size
+
+def build_common(tree, path, config):
+    concat_files = config.get('concat_files', [])
+    workdir = config['workdir']
+    pool = CommandExecutor(workdir)
+    for i, concat in enumerate(concat_files):
+        inputs = concat.get('inputs')
+        if not inputs or type(inputs) != list:
+            logging.error(f'Invalid inputs in concat_files[{i}]')
+            raise RuntimeError('Invalid argument')
+        output = concat.get('output')
+        if not output or type(output) != str:
+            logging.error(f'Invalid output in concat_files[{i}]')
+            raise RuntimeError('Invalid argument')
+        inputs = [tree.expand_variables(config, i) for i in inputs]
+        inputs = reduce(lambda acc, x: acc + glob.glob(x), inputs, [])
+        if not inputs:
+            logging.error(f'Invalid inputs in concat_files[{i}], files not found')
+            raise RuntimeError('Invalid argument')
+        output = tree.expand_variables(config, output)
+        if not output.startswith('/'):
+            output = os.path.join(workdir, output)
+        if files_equal(inputs, output):
+            logging.info(f'{output} already concated')
+        else:
+            inputs.sort()
+            cmd = f'cat {" ".join(inputs)} > {output}'
+            pool.put(f'file_concat-{i}', cmd)
+    pool.wait()
+
 def build_mlir(tree, path, config):
+    build_common(tree, path, config)
+
     workdir = config['workdir']
     name = config['name']
     env = [
@@ -69,6 +109,8 @@ def build_mlir(tree, path, config):
         logging.info(f'Deploy {name} done')
 
 def build_nntc(tree, path, config):
+    build_common(tree, path, config)
+
     workdir = config['workdir']
     if option_time_only and not config.get('time', True):
         return

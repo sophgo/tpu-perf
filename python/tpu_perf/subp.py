@@ -26,7 +26,7 @@ def env_list_to_dict(env, base=os.environ):
     return env_dict
 
 class CommandExecutor:
-    def __init__(self, cwd, env, memory_hint = None, verbose=False):
+    def __init__(self, cwd, env=dict(), memory_hint = None, verbose=False):
         self.verbose = verbose
         if memory_hint is None:
             memory_hint = 1024 * 1024 * 7
