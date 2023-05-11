@@ -232,10 +232,9 @@ def run_mlir(tree, path, raw_config, stat_f, extra):
         deploy = tree.expand_variables(raw_config, deploy)
         args, _ = parser.parse_known_args(deploy.split())
         bmodel = args.model.replace('.bmodel', '/compilation.bmodel')
-        if args.chip == 'bm1684':
+        profile_path = args.model + '.compiler_profile_0.txt'
+        if args.chip == 'bm1684' and not os.path.exists(profile_path):
             profile_path = os.path.join(cwd, 'compiler_profile_0.dat')
-        else:
-            profile_path = args.model + '.compiler_profile_0.txt'
         prec = args.quantize
         if re.match('^F\d+$', prec):
             prec = prec.replace('F', 'FP')
