@@ -1,3 +1,5 @@
+from functools import reduce
+import glob
 import sys
 import os
 import logging
@@ -7,6 +9,7 @@ from .buildtree import check_buildtree, BuildTree
 from .subp import CommandExecutor, sys_memory_size
 from .util import *
 import time
+
 
 def replace_shape_batch(cmd, batch_size):
     match = re.search('-shapes(=| *)["\']?((\[[\\d, ]+\],?)+)["\']?', cmd)
@@ -24,16 +27,17 @@ def replace_shape_batch(cmd, batch_size):
         for s in shapes)
     return cmd.replace(shapes_str, new_str)
 
+
 option_time_only = False
 
-import glob
-from functools import reduce
+
 def files_equal(inputs, output):
     if not os.path.exists(output):
         return False
     input_size = reduce(lambda acc, x: acc + os.stat(x).st_size, inputs, 0)
     output_size = os.stat(output).st_size
     return input_size == output_size
+
 
 def build_common(tree, path, config):
     concat_files = config.get('concat_files', [])
@@ -51,7 +55,8 @@ def build_common(tree, path, config):
         inputs = [tree.expand_variables(config, i) for i in inputs]
         inputs = reduce(lambda acc, x: acc + glob.glob(x), inputs, [])
         if not inputs:
-            logging.error(f'Invalid inputs in concat_files[{i}], files not found')
+            logging.error(
+                f'Invalid inputs in concat_files[{i}], files not found')
             raise RuntimeError('Invalid argument')
         output = tree.expand_variables(config, output)
         if not output.startswith('/'):
@@ -64,6 +69,7 @@ def build_common(tree, path, config):
             pool.put(f'file_concat-{i}', cmd)
     pool.wait()
 
+
 def build_mlir(tree, path, config):
     build_common(tree, path, config)
 
@@ -74,27 +80,37 @@ def build_mlir(tree, path, config):
         for v in config.get('mlir_build_env', [])]
     pool = CommandExecutor(workdir, env)
 
-    if 'mlir_transform' in config:
-        logging.info(f'Transforming MLIR {name}...')
-        trans_cmd = tree.expand_variables(config, config['mlir_transform'])
-        pool.put('mlir_transform', trans_cmd)
-        pool.wait()
-        logging.info(f'Transform MLIR {name} done')
+    for key in ['mlir_transform', 'mlir_calibration']:
+        if key not in config:
+            continue
 
-    if 'mlir_calibration' in config:
-        logging.info(f'Calibrating MLIR {name}...')
-        cali_cmd = tree.expand_variables(config, config['mlir_calibration'])
-        pool.put('mlir_calibration', cali_cmd)
-        pool.wait()
-        logging.info(f'Calibrate MLIR {name} done')
+        logging.info(f'Run `{key}` of {name}...')
+        if not isinstance(config[key], list):
+            config[key] = [config[key]]
+
+        for i, cmd in enumerate(config[key]):
+            logging.info(f'Running {i}/{len(config[key])}')
+            trans_cmd = tree.expand_variables(config, cmd)
+            logging.info(trans_cmd)
+            pool.put(key, trans_cmd)
+            pool.wait()
+
+        logging.info(f'`{key}` of {name} done.')
 
     if 'deploy' in config:
         logging.info(f'Deploying {name}...')
-        if type(config['deploy']) != list:
+        if not isinstance(config['deploy'], list):
             config['deploy'] = [config['deploy']]
         fns = [fn for fn in os.listdir(workdir) if fn.endswith('npz')]
         for i, deploy in enumerate(config['deploy']):
+            if deploy is None or deploy.startswith("skip"):
+                logging.info(f'Skip {i}/{len(config["deploy"])}')
+                continue
             title = f'mlir_deploy.{i}'
+            trans_cmd = tree.expand_variables(config, deploy)
+
+            logging.info(f'Running {i}/{len(config["deploy"])}')
+            logging.info(trans_cmd)
             cwd = os.path.join(workdir, title)
             os.makedirs(cwd, exist_ok=True)
             for fn in fns:
@@ -103,10 +119,11 @@ def build_mlir(tree, path, config):
                     os.path.join(cwd, fn))
             pool.put(
                 title,
-                tree.expand_variables(config, deploy),
+                trans_cmd,
                 cwd=cwd)
             pool.wait()
         logging.info(f'Deploy {name} done')
+
 
 def build_nntc(tree, path, config):
     build_common(tree, path, config)
@@ -162,7 +179,8 @@ def build_nntc(tree, path, config):
             tree.global_config.get('fp_loops') or [dict()]
         for loop in fp_loops:
             loop_config = dict_override(config, loop)
-            cmd = tree.expand_variables(loop_config, loop_config["fp_compile_options"])
+            cmd = tree.expand_variables(
+                loop_config, loop_config["fp_compile_options"])
             for batch_size in batch_sizes:
                 if 'fp_batch_sizes' in config:
                     batch_cmd = replace_shape_batch(cmd, batch_size)
@@ -205,6 +223,7 @@ def build_nntc(tree, path, config):
         int8_pool.wait()
         elaps = format_seconds(time.monotonic() - start)
         logging.info(f'INT8 bmodel {name} done in {elaps}.')
+
 
 def main():
     logging.basicConfig(
@@ -254,6 +273,7 @@ def main():
                     logging.warning(f'Task failed, {err}')
                     ret = -1
     sys.exit(ret)
+
 
 if __name__ == '__main__':
     main()
