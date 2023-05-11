@@ -179,9 +179,9 @@ def run_model(tree, config, name, b, profile_path, bmodel, stat_f, extra):
         logging.warning(f'No GOPs in config.yaml, {config["name"]}')
         row.append('N/A')
     if info is not None:
-        s2l = info['S2L']
-        l2s = info['L2S']
-        s2s = info['S2S']
+        s2l = info.get('S2L', math.nan)
+        l2s = info.get('L2S', math.nan)
+        s2s = info.get('S2S', math.nan)
         calc_ddr_bandwidth = lambda t: \
             (s2l + l2s + s2s * 2) / t * 1000 / 1024**3 / ddr_total
 
