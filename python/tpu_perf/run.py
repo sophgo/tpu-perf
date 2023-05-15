@@ -378,7 +378,7 @@ def main():
                 'cpu_usage'])
 
         for path, config in tree.walk():
-            ok = ok and run_func(tree, path, config, csv_f, extra)
+            ok = run_func(tree, path, config, csv_f, extra) and ok
 
     sys.exit(255 if not ok else 0)
 
