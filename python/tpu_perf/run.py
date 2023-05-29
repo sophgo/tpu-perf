@@ -152,7 +152,7 @@ def run_model(tree, config, name, b, profile_path, bmodel, stat_f, extra):
     if tree.global_config['target'] == 'BM1684':
         if config['prec'] == 'FP32':
             mac_total = 2.2
-        elif config['prec'] == 'INT8':
+        elif config['prec'].startswith('INT8'):
             mac_total = 17.6
         else:
             logging.error(f'Invalid prec type "{config["prec"]}" for BM1684')
@@ -163,7 +163,7 @@ def run_model(tree, config, name, b, profile_path, bmodel, stat_f, extra):
             mac_total = 2
         elif config['prec'] == 'FP16' or config['prec'] == 'BF16':
             mac_total = 16
-        elif config['prec'] == 'INT8':
+        elif config['prec'].startswith('INT8'):
             mac_total = 32
         else:
             logging.error(f'Invalid prec type "{config["prec"]}" for BM1684')
@@ -238,10 +238,11 @@ def run_mlir(tree, path, raw_config, stat_f, extra):
         prec = args.quantize
         if re.match('^F\d+$', prec):
             prec = prec.replace('F', 'FP')
-        raw_config['prec'] = prec
+
         name = prec
         if args.asymmetric:
             name += '-asym'
+        raw_config['prec'] = name
 
         ok = run_model(
             tree, raw_config,
