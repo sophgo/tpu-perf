@@ -38,7 +38,7 @@ def files_equal(inputs, output):
 def build_common(tree, path, config):
     concat_files = config.get('concat_files', [])
     workdir = config['workdir']
-    pool = CommandExecutor(workdir)
+    pool = CommandExecutor(workdir, incremental=tree.args.incremental)
     for i, concat in enumerate(concat_files):
         inputs = concat.get('inputs')
         if not inputs or type(inputs) != list:
@@ -72,11 +72,12 @@ def build_mlir(tree, path, config):
     env = [
         tree.expand_variables(config, v)
         for v in config.get('mlir_build_env', [])]
-    pool = CommandExecutor(workdir, env)
-
+    pool = CommandExecutor(workdir, env, incremental=tree.args.incremental)
+    
     if 'mlir_transform' in config:
         logging.info(f'Transforming MLIR {name}...')
         trans_cmd = tree.expand_variables(config, config['mlir_transform'])
+
         pool.put('mlir_transform', trans_cmd)
         pool.wait()
         logging.info(f'Transform MLIR {name} done')
@@ -217,6 +218,7 @@ def main():
     import argparse
     parser = argparse.ArgumentParser(description='tpu-perf benchmark tool')
     parser.add_argument('--time', action='store_true')
+    parser.add_argument('--incremental', action='store_true')
     parser.add_argument('--exit-on-error', action='store_true')
     BuildTree.add_arguments(parser)
     args = parser.parse_args()

@@ -2,7 +2,8 @@ import os
 import re
 import subprocess
 import logging
-from pprint import pprint
+from pprint import pprint, pformat
+from .util import hash
 
 def bulkize(l, n):
     for i in range(0, len(l), n):
@@ -26,7 +27,7 @@ def env_list_to_dict(env, base=os.environ):
     return env_dict
 
 class CommandExecutor:
-    def __init__(self, cwd, env=dict(), memory_hint = None, verbose=False):
+    def __init__(self, cwd, env=dict(), memory_hint = None, verbose=False, incremental=False):
         self.verbose = verbose
         if memory_hint is None:
             memory_hint = 1024 * 1024 * 7
@@ -38,6 +39,7 @@ class CommandExecutor:
         if self.threads > max_threads:
             self.threads = max_threads
         self.cwd = cwd
+        self.incremental = incremental
         self.procs = []
         self.pipes = []
         self.logs = []
@@ -63,19 +65,37 @@ class CommandExecutor:
         self.pipes = []
         for title, args, kw_args in bulk:
             cmd_fn = os.path.join(kw_args['cwd'], f'{title}.cmd')
-            with open(cmd_fn, 'w') as f:
-                pprint(args, f)
-                pprint(kw_args, f)
-                f.write(f'\n\n---------------\n{args}\n')
             log_fn = os.path.join(kw_args['cwd'], f'{title}.log')
+            flag_fn = f'{cmd_fn}.1'
+            
+            old_hash = ''
+            if os.path.exists(cmd_fn):
+                with open(cmd_fn) as r:
+                    old_hash = hash(''.join(r.readlines()))
+            
+            cmd_log = '\n'.join([
+                pformat(args),
+                pformat(kw_args),
+                f'\n\n---------------\n{args}\n',
+            ])
+            
+            cmd_hash = hash(cmd_log)
+            if self.incremental and cmd_hash == old_hash and not os.path.exists(flag_fn):
+                continue
+            
+            with open(cmd_fn, 'w') as f:
+                f.write(cmd_log)
+                
+            open(flag_fn,'w').close()
+            
             log = open(log_fn, 'w')
             p = subprocess.Popen(*args, **kw_args, stdout=log, stderr=log)
-            self.logs.append((log_fn, log))
+            self.logs.append((log_fn, flag_fn, log))
             self.pipes.append(p)
 
     def drain(self):
         for i, p in enumerate(self.pipes):
-            log_fn, log = self.logs[i]
+            log_fn, flag_fn, log = self.logs[i]
             ret = p.wait()
             log.close()
             if ret != 0:
@@ -85,6 +105,9 @@ class CommandExecutor:
                 else:
                     logging.error(f'Command failed, please check {log_fn}')
                 raise RuntimeError('Command failed')
+            else:
+                os.remove(flag_fn)
+                
 
     def wait(self):
         try:

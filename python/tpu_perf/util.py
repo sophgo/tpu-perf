@@ -47,3 +47,7 @@ def format_seconds(s):
         ['hours', 'minutes', 'seconds'])
     ret = ' '.join(f'{v} {u}' for v, u in pairs if v) or '0 second'
     return f'{days} days {ret}' if days else ret
+
+def hash(cmd):
+    from hashlib import md5
+    return md5(cmd.encode()).hexdigest()
