@@ -47,7 +47,7 @@ def parse_stats(string):
     return ret
 
 def parse_profile(fn):
-    with open(fn) as f:
+    with open(fn, errors='ignore') as f:
         lines = f.read()
     if not lines:
         return
@@ -116,7 +116,7 @@ def run_model(tree, config, name, b, profile_path, bmodel, stat_f, extra):
         else:
             logging.warning(f'{full_name} has no reference data')
     else:
-        logging.warning(f'Runtime compare {full_name} skpped')
+        logging.warning(f'Runtime compare {full_name} skipped')
     cmd_opts.extend([iter_opt, str(int(rounds))])
     logging.info(f'Runtime test {full_name} x{int(rounds)}')
     pool.put(
