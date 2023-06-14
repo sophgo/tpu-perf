@@ -26,6 +26,7 @@ def malloc_trim():
 class Runner:
     def __init__(self):
         self.stat_files = dict()
+        self.tested_names = set()
 
     def run(self, tree, path, config):
         if 'harness' not in config:
@@ -49,6 +50,11 @@ class Runner:
             if not os.path.exists(bmodel):
                 logging.warning(f'{bmodel} does not exist')
                 continue
+            path_name = os.path.join(path, tree.expand_variables(config, args['name']))
+            if path_name in self.tested_names:
+                logging.warning(f'Skip duplicate {"/".join(bmodel.split("/")[-2:])}')
+                continue
+            self.tested_names.add(path_name)
             stats = harness(tree, config, args)
             malloc_trim()
             name = [f'{config["name"]}-{args["name"]}']
