@@ -50,15 +50,15 @@ class Runner:
             if not os.path.exists(bmodel):
                 logging.warning(f'{bmodel} does not exist')
                 continue
-            path_name = os.path.join(path, tree.expand_variables(config, args['name']))
-            if path_name in self.tested_names:
-                logging.warning(f'Skip duplicate {"/".join(bmodel.split("/")[-2:])}')
+            name = tree.expand_variables(config, args['name'])
+            name = f'{config["name"]}-{name}'
+            if name in self.tested_names:
+                logging.warning(f'Skip duplicate {name}')
                 continue
-            self.tested_names.add(path_name)
+            self.tested_names.add(name)
             stats = harness(tree, config, args)
             malloc_trim()
-            name = [f'{config["name"]}-{args["name"]}']
-            get_csv(stats).writerow(name + [
+            get_csv(stats).writerow([name] + [
                 f'{v:.2%}' if type(v) == float else str(v)
                 for v in stats.values()])
 
