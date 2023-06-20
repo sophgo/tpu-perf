@@ -7,6 +7,7 @@ from .buildtree import check_buildtree, BuildTree
 from .subp import CommandExecutor, sys_memory_size
 from .util import *
 import time
+import json
 
 def replace_shape_batch(cmd, batch_size):
     match = re.search('-shapes(=| *)["\']?((\[[\\d, ]+\],?)+)["\']?', cmd)
@@ -28,6 +29,7 @@ option_time_only = False
 
 import glob
 from functools import reduce
+
 def files_equal(inputs, output):
     if not os.path.exists(output):
         return False
@@ -107,6 +109,8 @@ def build_mlir(tree, path, config):
                 cwd=cwd)
             pool.wait()
         logging.info(f'Deploy {name} done')
+
+    return name
 
 def build_nntc(tree, path, config):
     build_common(tree, path, config)
@@ -218,6 +222,7 @@ def main():
     parser = argparse.ArgumentParser(description='tpu-perf benchmark tool')
     parser.add_argument('--time', action='store_true')
     parser.add_argument('--exit-on-error', action='store_true')
+    parser.add_argument('--report', action='store_true')
     BuildTree.add_arguments(parser)
     args = parser.parse_args()
     global option_time_only
@@ -237,22 +242,39 @@ def main():
 
     from concurrent.futures import ThreadPoolExecutor, as_completed
     ret = 0
+    succ_cases, failed_cases = set(), set()
+
     with ThreadPoolExecutor(max_workers=num_workers) as executor:
         futures = []
 
         for path, config in tree.walk():
             f = executor.submit(build_fn, tree, path, config)
             futures.append(f)
+            failed_cases.add(config["name"])
 
         for f in as_completed(futures):
-            err = f.exception()
-            if err:
+            try:
+                succ_cases.add(f.result())
+            except Exception as err:
                 if args.exit_on_error:
                     logging.error(f'Quit because of exception, {err}')
                     os._exit(-1)
                 else:
                     logging.warning(f'Task failed, {err}')
                     ret = -1
+
+        if args.report:
+            failed_cases = failed_cases - succ_cases
+
+            output_fn = './failed_cases_list.json'
+            data = {
+                "num": len(failed_cases),
+                "target": args.target,
+                "case_name": list(failed_cases)
+            }
+            with open(output_fn, 'w') as f:
+                json.dump(data, f)
+
     sys.exit(ret)
 
 if __name__ == '__main__':
