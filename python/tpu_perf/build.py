@@ -222,7 +222,7 @@ def main():
     parser = argparse.ArgumentParser(description='tpu-perf benchmark tool')
     parser.add_argument('--time', action='store_true')
     parser.add_argument('--exit-on-error', action='store_true')
-    parser.add_argument('--report', action='store_true')
+    parser.add_argument('--report', type=str, help='report failed cases to the specified json file')
     BuildTree.add_arguments(parser)
     args = parser.parse_args()
     global option_time_only
@@ -265,15 +265,12 @@ def main():
 
         if args.report:
             failed_cases = failed_cases - succ_cases
-
-            output_fn = './failed_cases_list.json'
-            data = {
-                "num": len(failed_cases),
-                "target": args.target,
-                "case_name": list(failed_cases)
-            }
+            output_fn = f'{args.report}'
+            params = {"cases": [{"case_name": case} for case in failed_cases]}
+            
             with open(output_fn, 'w') as f:
-                json.dump(data, f)
+                json.dump(params, f)
+                f.write("\n")
 
     sys.exit(ret)
 
