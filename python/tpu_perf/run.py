@@ -46,17 +46,34 @@ def parse_stats(string):
 
     return ret
 
+def read_profile(fn):
+    parse_result = parse_profile(fn)
+    sum = {}
+    for data in parse_result:
+        for key,value in data.items():
+            if key == 'flops':
+                sum[key] = data[key]
+                continue
+            if key in sum:
+                sum[key] += data[key]
+            else:
+                sum[key] = data[key]
+    return sum
+
 def parse_profile(fn):
     with open(fn, errors='ignore') as f:
         lines = f.read()
     if not lines:
         return
-    lines = lines[lines.find('API_END'):]
-    data = dict()
-    for pair in re.finditer('(\w+) *: *([\d\.]+)', lines):
-        v = pair.group(2)
-        data[pair.group(1)] = float(v) if '.' in v else int(v)
-    return data
+    lines = re.split('\\s*API_END\\s*|\\s*ENGINE_BD\\s*', lines)[2::2]
+    result = []
+    for string in lines:
+        data = dict()
+        for pair in re.finditer('(\w+) *: *([\d\.]+)', string):
+            v = pair.group(2)
+            data[pair.group(1)] = float(v) if '.' in v else int(v)
+        result.append(data)
+    return result
 
 def format_float(v):
     if v > 0.1:
@@ -81,7 +98,7 @@ def run_model(tree, config, name, b, profile_path, bmodel, stat_f, extra):
     info = None
     rounds = None
     if os.path.exists(profile_path):
-        info = parse_profile(profile_path)
+        info = read_profile(profile_path)
         if info is not None:
             rounds = int(1200 / info['runtime'])
             max_rounds = 10000
