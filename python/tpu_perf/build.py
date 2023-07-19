@@ -222,7 +222,7 @@ def main():
     parser = argparse.ArgumentParser(description='tpu-perf benchmark tool')
     parser.add_argument('--time', action='store_true')
     parser.add_argument('--exit-on-error', action='store_true')
-    parser.add_argument('--report', type=str, help='report failed cases to the specified json file')
+    parser.add_argument('--report', type=str, help='report model compilation results to the specified json file')
     BuildTree.add_arguments(parser)
     args = parser.parse_args()
     global option_time_only
@@ -242,19 +242,18 @@ def main():
 
     from concurrent.futures import ThreadPoolExecutor, as_completed
     ret = 0
-    succ_cases, failed_cases = set(), set()
 
     with ThreadPoolExecutor(max_workers=num_workers) as executor:
-        futures = []
+        futures, succ_cases, failed_cases = [], [], []
 
         for path, config in tree.walk():
             f = executor.submit(build_fn, tree, path, config)
             futures.append(f)
-            failed_cases.add(config["name"])
+            failed_cases.append(config["name"])
 
         for f in as_completed(futures):
             try:
-                succ_cases.add(f.result())
+                succ_cases.append(f.result())
             except Exception as err:
                 if args.exit_on_error:
                     logging.error(f'Quit because of exception, {err}')
@@ -264,13 +263,13 @@ def main():
                     ret = -1
 
         if args.report:
-            failed_cases = failed_cases - succ_cases
             output_fn = f'{args.report}'
-            params = {"cases": [{"case_name": case} for case in failed_cases]}
-            
+            for case in succ_cases:
+                failed_cases.remove(case)
+
+            params = {"succ_cases": list(set(succ_cases)), "failed_cases": list(set(failed_cases))}
             with open(output_fn, 'w') as f:
                 json.dump(params, f)
-                f.write("\n")
 
     sys.exit(ret)
 
