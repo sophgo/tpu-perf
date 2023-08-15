@@ -210,6 +210,8 @@ def build_nntc(tree, path, config):
         elaps = format_seconds(time.monotonic() - start)
         logging.info(f'INT8 bmodel {name} done in {elaps}.')
 
+    return name
+
 def main():
     logging.basicConfig(
         level=logging.INFO,
