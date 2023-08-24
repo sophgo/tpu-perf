@@ -110,8 +110,6 @@ def build_mlir(tree, path, config):
             pool.wait()
         logging.info(f'Deploy {name} done')
 
-    return name
-
 def build_nntc(tree, path, config):
     build_common(tree, path, config)
 
@@ -210,8 +208,6 @@ def build_nntc(tree, path, config):
         elaps = format_seconds(time.monotonic() - start)
         logging.info(f'INT8 bmodel {name} done in {elaps}.')
 
-    return name
-
 def main():
     logging.basicConfig(
         level=logging.INFO,
@@ -244,31 +240,28 @@ def main():
 
     from concurrent.futures import ThreadPoolExecutor, as_completed
     ret = 0
+    futures = {}
+    succ_cases, failed_cases = [], []
 
     with ThreadPoolExecutor(max_workers=num_workers) as executor:
-        futures, succ_cases, failed_cases = [], [], []
-
         for path, config in tree.walk():
-            f = executor.submit(build_fn, tree, path, config)
-            futures.append(f)
-            failed_cases.append(config["name"])
+            future = executor.submit(build_fn, tree, path, config)
+            futures[config['name']] = future
 
-        for f in as_completed(futures):
+        for f in as_completed(futures.values()):
             try:
-                succ_cases.append(f.result())
+                succ_cases.append(next(key for key, value in futures.items() if value == f))
             except Exception as err:
                 if args.exit_on_error:
                     logging.error(f'Quit because of exception, {err}')
                     os._exit(-1)
                 else:
                     logging.warning(f'Task failed, {err}')
+                    failed_cases.append(next(key for key, value in futures.items() if value == f))
                     ret = -1
 
         if args.report:
             output_fn = f'{args.report}'
-            for case in succ_cases:
-                failed_cases.remove(case)
-
             params = {"succ_cases": list(set(succ_cases)), "failed_cases": list(set(failed_cases))}
             with open(output_fn, 'w') as f:
                 json.dump(params, f)
