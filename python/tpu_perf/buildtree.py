@@ -86,7 +86,7 @@ class BuildTree:
             default=[0])
         parser.add_argument(
             '--target', '-t', type=str, default='BM1684X',
-            choices=['BM1684', 'BM1684X'],
+            choices=['BM1684', 'BM1684X', 'BM1686'],
             help='Target chip')
 
     def read_global_variable(self, name, config = dict(), default=None):
@@ -227,8 +227,14 @@ class BuildTree:
         if config.get('ignore'):
             return
 
+        matching_keys=[]
+        for key in config.keys():
+            if '/' in key and self.target in key.split('/'):
+                matching_keys.append(key)
         if self.target in config:
-            specific = config.pop(self.target)
+            matching_keys.append(self.target)
+        for key in matching_keys:
+            specific = config.pop(key)
             config = dict_override(config, specific)
 
         config = dict_override(config, context)
