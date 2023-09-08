@@ -86,7 +86,7 @@ class BuildTree:
             default=[0])
         parser.add_argument(
             '--target', '-t', type=str, default='BM1684X',
-            choices=['BM1684', 'BM1684X', 'BM1686'],
+            choices=['BM1684', 'BM1684X', 'BM1686', 'CV186X'],
             help='Target chip')
 
     def read_global_variable(self, name, config = dict(), default=None):
