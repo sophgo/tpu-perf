@@ -53,8 +53,8 @@ def init_table(target, tablename):
 
 
     else: #BM1684X
-        ws.title = 'BM1684X'
-        ws[col(sc,3)+row(sr,0)] = 'BM1684X@1Ghz Benchmark(qps)'
+        ws.title = target
+        ws[col(sc,3)+row(sr,0)] = target + '@1Ghz Benchmark(qps)'
         #fp32, fp16, int8 1b~16b
         ws.merge_cells(col(sc,3)+row(sr,0)+':'+col(sc,8)+row(sr,0))
         ws[col(sc,3)+row(sr,0)].alignment = Alignment(horizontal='center', vertical='center')
@@ -88,10 +88,10 @@ def adjust_sheet(filename):
         ws.column_dimensions[letter].width=collen+2
 
     #left side align
-    if ws.title == 'BM1684X':
-        endsc = 8
-    else:
+    if ws.title == 'BM1684':
         endsc = 7
+    else:
+        endsc = 8
 
     colnum = 3
     #print(ws.max_row)
@@ -206,14 +206,15 @@ def fill_table(bench, tablename, target):
     #ws.append(['name', 'shape', 'fp32', 'fp16','int8-1batch','int8-4batch','int8-8batch','int8-16batch'])
     for item in bench:
         #print(item)
-        if target=='BM1684X':
-            ws.append([item['class'],item['name'], item['shape'], item['fp32'],item['fp16'], \
-                     item['int8-1b'],item['int8-4b'],item['int8-8b'], \
-                     item['int8-16b'], item['gops']])
-        else:
+        if target=='BM1684':
             ws.append([item['class'],item['name'], item['shape'], item['fp32'], \
                      item['int8-1b'],item['int8-4b'],item['int8-8b'], \
                      item['int8-16b'], item['gops']])
+        else:
+            ws.append([item['class'],item['name'], item['shape'], item['fp32'],item['fp16'], \
+                     item['int8-1b'],item['int8-4b'],item['int8-8b'], \
+                     item['int8-16b'], item['gops']])
+
     wb.save(tablename)
 
 def read_config(path):
@@ -259,7 +260,7 @@ def main():
     parser.add_argument('--stat', type=str, default='', required=True,\
                         help='the path/to/stat.csv')
     parser.add_argument('--target', type=str, default='BM1684X', \
-                        help='the device type, BM1684 or BM1684X')
+                        help='the device type, BM1684, BM1684X, BM1688, CV186X')
     parser.add_argument('--model_zoo', type=str, default='', required=True, \
                         help='the path/to/model-zoo')
     parser.add_argument('--table_name', type=str, default='formatted_result.xlsx', \

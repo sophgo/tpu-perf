@@ -166,29 +166,29 @@ def run_model(tree, config, name, b, profile_path, bmodel, stat_f, extra):
         format_float(real_time)]
 
     # If profile exists, calculate mac & ddr utilization
-    if tree.global_config['target'] == 'BM1684':
-        if config['prec'] == 'FP32':
-            mac_total = 2.2
-        elif config['prec'].startswith('INT8'):
-            mac_total = 17.6
-        else:
-            logging.error(f'Invalid prec type "{config["prec"]}" for BM1684')
-            raise RuntimeError('Invalid prec')
-        ddr_total = 32
-    elif tree.global_config['target'] == 'BM1684X':
-        if config['prec'] == 'FP32':
-            mac_total = 2
-        elif config['prec'] == 'FP16' or config['prec'] == 'BF16':
-            mac_total = 16
-        elif config['prec'].startswith('INT8'):
-            mac_total = 32
-        else:
-            logging.error(f'Invalid prec type "{config["prec"]}" for BM1684')
-            raise RuntimeError('Invalid prec')
-        ddr_total = 64
-    else:
-        logging.error(f'Invalid target {tree.global_config["target"]}')
-        raise RuntimeError('Invalid target')
+    mac_configs = {
+        'BM1684':  {'FP32': 2.2, 'INT8': 17.6},
+        'BM1684X': {'FP32': 2, 'FP16': 16, 'BF16': 16, 'INT8': 32},
+        'BM1686':  {'FP32': 0.25, 'FP16': 2, 'BF16': 2, 'INT8': 8},
+        'BM1688':  {'FP32': 0.25, 'FP16': 2, 'BF16': 2, 'INT8': 8},
+        'CV186X':  {'FP32': 0.09375, 'FP16': 0.75, 'BF16': 0.75, 'INT8': 3}
+    }
+    ddr_configs = {
+        'BM1684': 32,
+        'BM1684X': 64,
+        'BM1686': 24,
+        'BM1688': 24,
+        'CV186X': 12}
+    target = tree.global_config['target']
+    prec = config['prec']
+    if prec.startswith('INT8'):
+        prec = 'INT8'
+    mac_total = mac_configs.get(target).get(prec)
+    ddr_total = ddr_configs.get(target)
+    if mac_total is None or ddr_total is None:
+        logging.error('Invalid config for {} {}'.format(target, config['prec']))
+        raise RuntimeError('Invalid config')
+
     if 'gops' in config:
         calc_mac_util = lambda t: config['gops'] * b / t / mac_total
         row.append(f'{calc_mac_util(real_time):.2%}')
@@ -235,8 +235,8 @@ def run_mlir(tree, path, raw_config, stat_f, extra):
         help="set default qauntization type: F32/BF16/F16/INT8")
     parser.add_argument(
         "--chip", required=True, type=str.lower,
-        choices=['bm1686', 'bm1684x', 'bm1684',
-            'cv183x', 'cv182x', 'cv181x', 'cv180x'],
+        choices=['bm1688', 'bm1686', 'bm1684x', 'bm1684',
+            'cv186x', 'cv183x', 'cv182x', 'cv181x', 'cv180x'],
         help="chip platform name")
     parser.add_argument("--model", required=True, help='output model')
     parser.add_argument(
