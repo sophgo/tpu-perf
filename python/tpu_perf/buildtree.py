@@ -86,8 +86,13 @@ class BuildTree:
             default=[0])
         parser.add_argument(
             '--target', '-t', type=str, default='BM1684X',
-            choices=['BM1684', 'BM1684X', 'BM1686', 'BM1688', 'CV186X'],
+            choices=['BM1684', 'BM1684X', 'BM1688', 'CV186X'],
             help='Target chip')
+        parser.add_argument(
+            '--num_core', '-c', type=int, default=1, choices=[1, 2, 8], 
+            help='The number of TPU cores used for parallel computation')
+        parser.add_argument(
+            '--model_name', nargs='?', type=str, help='Model name')
 
     def read_global_variable(self, name, config = dict(), default=None):
         if default is None and name not in self.global_config:
@@ -259,6 +264,14 @@ class BuildTree:
 
         if 'harness' in config and type(config['harness']['args']) != list:
             config['harness']['args'] = [config['harness']['args']]
+
+        if 'num_core' in config:
+            for chip in config['num_core']:
+                if self.target in chip and self.args.num_core in config['num_core'][chip]:
+                    config['num_core'] = self.args.num_core
+                    break
+        
+        config['model_name'] = self.args.model_name
 
         shapes = config.get('shapes', [None])
         gops_list = config.get('gops', [None])

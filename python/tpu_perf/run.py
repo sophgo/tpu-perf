@@ -169,14 +169,12 @@ def run_model(tree, config, name, b, profile_path, bmodel, stat_f, extra):
     mac_configs = {
         'BM1684':  {'FP32': 2.2, 'INT8': 17.6},
         'BM1684X': {'FP32': 2, 'FP16': 16, 'BF16': 16, 'INT8': 32},
-        'BM1686':  {'FP32': 0.25, 'FP16': 2, 'BF16': 2, 'INT8': 8},
         'BM1688':  {'FP32': 0.25, 'FP16': 2, 'BF16': 2, 'INT8': 8},
         'CV186X':  {'FP32': 0.09375, 'FP16': 0.75, 'BF16': 0.75, 'INT8': 3}
     }
     ddr_configs = {
         'BM1684': 32,
         'BM1684X': 64,
-        'BM1686': 24,
         'BM1688': 24,
         'CV186X': 12}
     target = tree.global_config['target']
@@ -235,7 +233,7 @@ def run_mlir(tree, path, raw_config, stat_f, extra):
         help="set default qauntization type: F32/BF16/F16/INT8")
     parser.add_argument(
         "--chip", required=True, type=str.lower,
-        choices=['bm1688', 'bm1686', 'bm1684x', 'bm1684',
+        choices=['bm1688', 'bm1684x', 'bm1684',
             'cv186x', 'cv183x', 'cv182x', 'cv181x', 'cv180x'],
         help="chip platform name")
     parser.add_argument("--model", required=True, help='output model')
