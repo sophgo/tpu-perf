@@ -250,10 +250,13 @@ def main():
     with ThreadPoolExecutor(max_workers=num_workers) as executor:
         for path, config in tree.walk():
             future = executor.submit(build_fn, tree, path, config)
+            if config['model_name'] and config['name'] != config['model_name']:
+                continue
             futures[config['name']] = future
 
         for f in as_completed(futures.values()):
             try:
+                result = f.result()
                 succ_cases.append(next(key for key, value in futures.items() if value == f))
             except Exception as err:
                 if args.exit_on_error:
