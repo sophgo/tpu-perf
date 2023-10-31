@@ -48,6 +48,8 @@ def parse_stats(string):
 
 def read_profile(fn):
     parse_result = parse_profile(fn)
+    if not parse_result:
+        return
     sum = {}
     for data in parse_result:
         for key,value in data.items():
