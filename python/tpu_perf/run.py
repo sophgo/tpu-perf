@@ -83,6 +83,9 @@ def format_float(v):
 
 def run_model(tree, config, name, b, profile_path, bmodel, stat_f, extra):
     ok = True
+    if not os.path.exists(bmodel):
+        logging.error(f'{bmodel} does not exist')
+        return False
     title = f'run.{name}'
     workdir = config['workdir']
     env = [
@@ -220,7 +223,8 @@ def run_model(tree, config, name, b, profile_path, bmodel, stat_f, extra):
 
 def run_mlir(tree, path, raw_config, stat_f, extra):
     ok = True
-
+    if raw_config['model_name'] and raw_config['name'] != raw_config['model_name']:
+        return ok
     workdir = raw_config['workdir']
     deploies = raw_config.get('deploy', [])
     if not deploies:
