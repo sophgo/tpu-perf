@@ -7,6 +7,7 @@ import sys
 import time
 import logging
 import argparse
+import json
 from .buildtree import check_buildtree, BuildTree
 from .subp import CommandExecutor
 from .util import *
@@ -225,8 +226,6 @@ def run_model(tree, config, name, b, profile_path, bmodel, stat_f, extra):
 
 def run_mlir(tree, path, raw_config, stat_f, extra):
     ok = True
-    if raw_config['model_name'] and raw_config['name'] != raw_config['model_name']:
-        return ok
     workdir = raw_config['workdir']
     deploies = raw_config.get('deploy', [])
     if not deploies:
@@ -353,6 +352,7 @@ def main():
     parser = argparse.ArgumentParser(description='tpu-perf benchmark tool')
     BuildTree.add_arguments(parser)
     parser.add_argument('--cmodel', action='store_true')
+    parser.add_argument('--report', type=str, help='report model runtime results to the specified json file')
     args = parser.parse_args()
     global option_cmodel_stats
     option_cmodel_stats = args.cmodel
@@ -373,6 +373,7 @@ def main():
     extra = list(extra)
     extra.sort()
     ok = True
+    succ_cases, failed_cases = [], []
     with open(stat_fn, 'w') as f:
         csv_f = csv.writer(f)
         if option_cmodel_stats:
@@ -400,7 +401,16 @@ def main():
                 'cpu_usage'])
 
         for path, config in tree.walk():
-            ok = run_func(tree, path, config, csv_f, extra) and ok
+            if config['model_name'] and config['name'] != config['model_name']:
+                continue
+            res = run_func(tree, path, config, csv_f, extra)
+            succ_cases.append(config['name']) if res else failed_cases.append(config['name'])
+            ok = res and ok
+    
+    if args.report:
+        params = {"succ_cases": list(set(succ_cases)), "failed_cases": list(set(failed_cases))}
+        with open(f'{args.report}', 'w') as f:
+            json.dump(params, f)
 
     sys.exit(255 if not ok else 0)
 
