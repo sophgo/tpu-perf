@@ -176,7 +176,7 @@ def run_model(tree, config, name, b, profile_path, bmodel, stat_f, extra):
     mac_configs = {
         'BM1684':  {'FP32': 2.2, 'INT8': 17.6},
         'BM1684X': {'FP32': 2, 'FP16': 16, 'BF16': 16, 'INT8': 32},
-        'BM1688':  {'FP32': 0.25, 'FP16': 2, 'BF16': 2, 'INT8': 8},
+        'BM1688':  {'FP32': 0.225, 'FP16': 1.8, 'BF16': 1.8, 'INT8': 7.2},
         'CV186X':  {'FP32': 0.09375, 'FP16': 0.75, 'BF16': 0.75, 'INT8': 3}
     }
     ddr_configs = {
@@ -188,7 +188,7 @@ def run_model(tree, config, name, b, profile_path, bmodel, stat_f, extra):
     prec = config['prec']
     if prec.startswith('INT8'):
         prec = 'INT8'
-    mac_total = mac_configs.get(target).get(prec)
+    mac_total = mac_configs.get(target).get(prec) * config['num_core']
     ddr_total = ddr_configs.get(target)
     if mac_total is None or ddr_total is None:
         logging.error('Invalid config for {} {}'.format(target, config['prec']))
