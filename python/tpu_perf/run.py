@@ -118,7 +118,8 @@ def run_model(tree, config, name, b, profile_path, bmodel, stat_f, extra):
     elif rounds is None:
         rounds = 2000 / b
 
-    full_name = f'{config["name"]} {name}'
+    core_suffix = '' if config["num_core"] == 1 else f'_core{config["num_core"]}'
+    full_name = f'{config["name"]}{core_suffix} {name}'
 
     ref_fn = os.path.join(bmodel_dir, 'output_ref_data.dat')
     dev = tree.global_config['devices'][0]
@@ -165,7 +166,7 @@ def run_model(tree, config, name, b, profile_path, bmodel, stat_f, extra):
     if 'calculate_times' in iter_opt:
         real_time /= rounds
     row = [
-        config['name'],
+        f'{config["name"]}{core_suffix}',
         *[config.get(k, '') for k in extra],
         stats['shape'],
         format_float(config['gops'] * b) if 'gops' in config else 'N/A',
@@ -247,7 +248,7 @@ def run_mlir(tree, path, raw_config, stat_f, extra):
         help="do INT8 asymmetric quantization")
 
     for i, deploy in enumerate(deploies):
-        title = f'mlir_deploy.{i}'
+        title = f'mlir_deploy_core{raw_config["num_core"]}.{i}'
         cwd = os.path.join(workdir, title)
         deploy = tree.expand_variables(raw_config, deploy)
         args, _ = parser.parse_known_args(deploy.split())
@@ -263,7 +264,6 @@ def run_mlir(tree, path, raw_config, stat_f, extra):
         if args.asymmetric:
             name += '-asym'
         raw_config['prec'] = name
-
         ok = run_model(
             tree, raw_config,
             name,
@@ -403,9 +403,11 @@ def main():
         for path, config in tree.walk():
             if config['model_name'] and config['name'] != config['model_name']:
                 continue
-            res = run_func(tree, path, config, csv_f, extra)
-            succ_cases.append(config['name']) if res else failed_cases.append(config['name'])
-            ok = res and ok
+            for i in range(len(config['core_list'])):
+                config['num_core'] = config['core_list'][i]
+                res = run_func(tree, path, config, csv_f, extra)
+                succ_cases.append(config['name']) if res else failed_cases.append(config['name'])
+                ok = res and ok
     
     if args.report:
         params = {"succ_cases": list(set(succ_cases)), "failed_cases": list(set(failed_cases))}
