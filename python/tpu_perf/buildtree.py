@@ -89,7 +89,7 @@ class BuildTree:
             choices=['BM1684', 'BM1684X', 'BM1688', 'CV186X'],
             help='Target chip')
         parser.add_argument(
-            '--num_core', '-c', type=int, default=1, choices=[1, 2, 8], 
+            '--num_core', '-c', type=int, choices=[1, 2, 8], 
             help='The number of TPU cores used for parallel computation')
         parser.add_argument(
             '--model_name', nargs='?', type=str, help='Model name')
@@ -266,10 +266,13 @@ class BuildTree:
             config['harness']['args'] = [config['harness']['args']]
 
         if 'num_core' in config:
-            for chip in config['num_core']:
-                if self.target in chip and self.args.num_core in config['num_core'][chip]:
-                    config['num_core'] = self.args.num_core
+            for chip, core_values in config['num_core'].items():
+                if self.target in chip:
+                    config['core_list'] = core_values
                     break
+        else:
+            config['core_list'] = [1]
+
         
         config['model_name'] = self.args.model_name
 

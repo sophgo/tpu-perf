@@ -92,25 +92,28 @@ def build_mlir(tree, path, config):
         pool.wait()
         logging.info(f'Calibrate MLIR {name} done')
 
-    if 'deploy' in config:
-        logging.info(f'Deploying {name}...')
-        if type(config['deploy']) != list:
-            config['deploy'] = [config['deploy']]
-        fns = [fn for fn in os.listdir(workdir) if fn.endswith('npz')]
-        for i, deploy in enumerate(config['deploy']):
-            title = f'mlir_deploy.{i}'
-            cwd = os.path.join(workdir, title)
-            os.makedirs(cwd, exist_ok=True)
-            for fn in fns:
-                shutil.copyfile(
-                    os.path.join(workdir, fn),
-                    os.path.join(cwd, fn))
-            pool.put(
-                title,
-                tree.expand_variables(config, deploy),
-                cwd=cwd)
-            pool.wait()
-        logging.info(f'Deploy {name} done')
+    for i in range(len(config['core_list'])):
+        config['num_core'] = config['core_list'][i]
+
+        if 'deploy' in config:
+            logging.info(f'Deploying {name}_{config["num_core"]}_core...')
+            if type(config['deploy']) != list:
+                config['deploy'] = [config['deploy']]
+            fns = [fn for fn in os.listdir(workdir) if fn.endswith('npz')]
+            for j, deploy in enumerate(config['deploy']):
+                title = f'mlir_deploy_core{config["num_core"]}.{j}'
+                cwd = os.path.join(workdir, title)
+                os.makedirs(cwd, exist_ok=True)
+                for fn in fns:
+                    shutil.copyfile(
+                        os.path.join(workdir, fn),
+                        os.path.join(cwd, fn))
+                pool.put(
+                    title,
+                    tree.expand_variables(config, deploy),
+                    cwd=cwd)
+                pool.wait()
+            logging.info(f'Deploy {name}_{config["num_core"]}_core done')
 
 def build_nntc(tree, path, config):
     build_common(tree, path, config)
