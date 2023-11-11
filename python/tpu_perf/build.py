@@ -228,8 +228,6 @@ def main():
     parser.add_argument('--report', type=str, help='report model compilation results to the specified json file')
     BuildTree.add_arguments(parser)
     args = parser.parse_args()
-    if args.num_core != 1:
-        assert args.target in ['BM1688', 'CV186X']
     global option_time_only
     option_time_only = args.time
 

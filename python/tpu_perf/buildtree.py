@@ -89,9 +89,6 @@ class BuildTree:
             choices=['BM1684', 'BM1684X', 'BM1688', 'CV186X'],
             help='Target chip')
         parser.add_argument(
-            '--num_core', '-c', type=int, choices=[1, 2, 8], 
-            help='The number of TPU cores used for parallel computation')
-        parser.add_argument(
             '--model_name', nargs='?', type=str, help='Model name')
 
     def read_global_variable(self, name, config = dict(), default=None):
