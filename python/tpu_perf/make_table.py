@@ -5,7 +5,8 @@ import pandas as pd
 import csv
 import os
 import yaml
-subclass = ['vision','language']
+mainclass = ['vision', 'language']
+subclass = []
 def col(startcol, offset):
     return chr(ord(startcol)+offset)
 def row(startrow, offset):
@@ -88,19 +89,16 @@ def adjust_sheet(filename):
         ws.column_dimensions[letter].width=collen+2
 
     #left side align
-    if ws.title == 'BM1684':
-        endsc = 7
-    else:
+    if ws.title == 'BM1684X':
         endsc = 8
+    else:
+        endsc = 7
 
     colnum = 3
-    #print(ws.max_row)
     for column in ws[col(sc,3)+':'+ col(sc,endsc)]:
         for rownum in range(ws.max_row):
-            #print(colnum, rownum)
             rownum += 1
             if (rownum > (sr+1)):
-                #print(colnum, rownum, ws.cell(rownum, colnum).value)
                 ws[col(sc,colnum)+str(rownum)].alignment = Alignment(horizontal='left', vertical='center')
         colnum+=1
 
@@ -117,13 +115,11 @@ def adjust_sheet(filename):
             first = False
             preval = rows.value
             postval = ws.cell(rowcnt+1, (ord(sc) - ord('A'))+1).value
-            #print(preval, postval)
         postval = ws.cell(rowcnt+1, (ord(sc) - ord('A'))+1).value
         if (preval!=postval) and (preval != ''):
             endrow.append(rowcnt)
             first = True
         rowcnt += 1
-    #print(startrow,endrow)
     for i in range(len(startrow)):
         ws.merge_cells(col(sc,0)+str(startrow[i])+':'+col(sc,0)+str(endrow[i]))
         ws[col(sc,0)+str(startrow[i])].alignment = Alignment(horizontal='left', vertical='center')
@@ -132,15 +128,26 @@ def adjust_sheet(filename):
 
 def throughput(time, batchsize):
     fps = 1000/(float(time)/batchsize)
-    #print(time, batchsize, fps)
     return float('%.2f'%fps)
 
 def find_class(netname, classes):
-    #print(classes)
     if classes is not None:
       for bind in classes:
         if bind[1] == netname:
           return bind[0]
+
+def sort_table(input_dict):
+    new_table = []
+    for k in subclass:
+        for item in input_dict:
+            if item['class'] == k:
+                new_table.append(item)
+    return new_table
+
+def get_batchsize(shape):
+    step1 = shape.split(':')
+    step2 = step1[0].split('x')[0]
+    return int(step2)
 
 def analyze_stat(statpath, class_type):
     bench = []
@@ -151,7 +158,8 @@ def analyze_stat(statpath, class_type):
       new_netname = ''
       for row in csv_file:
         new_netname = row['name']
-        #print(pre_netname, new_netname)
+        if(('dyn' in row) and (row['dyn'] == 'TRUE')):
+          continue
         if pre_netname != new_netname:
           tmp = item.copy()
           if tmp!= {}:
@@ -168,9 +176,9 @@ def analyze_stat(statpath, class_type):
           pre_netname = new_netname
           time = 'time(ms)'
           if row['prec']=='FP32':
-            item['fp32'] = throughput(row[time], 1)
+            item['fp32'] = throughput(row[time], get_batchsize(row['shape']))
           elif ((row['prec'] == 'FP16') or (row['prec'] == 'BF16')):
-            item['fp16'] = throughput(row[time], 1)
+              item['fp16'] = throughput(row[time], get_batchsize(row['shape']))
           else:
             if(row['shape'].split('x')[0]=='1'):
               item['int8-1b'] = throughput(row[time], 1)
@@ -182,9 +190,9 @@ def analyze_stat(statpath, class_type):
               item['int8-16b'] = throughput(row[time], 16)
         else:
           if row['prec']=='FP32':
-            item['fp32'] = throughput(row[time], 1)
+            item['fp32'] = throughput(row[time], get_batchsize(row['shape']))
           elif ((row['prec'] == 'FP16') or (row['prec'] == 'BF16')):
-            item['fp16'] = throughput(row[time], 1)
+            item['fp16'] = throughput(row[time], get_batchsize(row['shape']))
           else:
             if(row['shape'].split('x')[0]=='1'):
               item['int8-1b'] = throughput(row[time], 1)
@@ -197,15 +205,13 @@ def analyze_stat(statpath, class_type):
 
       tmp = item.copy()
       bench.append(tmp)
-      #print(bench)
-      return bench
+      return sort_table(bench)
 
 def fill_table(bench, tablename, target):
     wb = load_workbook(tablename)
     ws = wb.active
     #ws.append(['name', 'shape', 'fp32', 'fp16','int8-1batch','int8-4batch','int8-8batch','int8-16batch'])
     for item in bench:
-        #print(item)
         if target=='BM1684':
             ws.append([item['class'],item['name'], item['shape'], item['fp32'], \
                      item['int8-1b'],item['int8-4b'],item['int8-8b'], \
@@ -230,9 +236,7 @@ def read_config(path):
 def get_class(zoo_path):
     results = []
     all=os.walk(zoo_path)
-    #print(zoo_path)
     for p, ds, fs in all:
-        #print(p)
         for f in fs:
             fullname = os.path.join(p,f)
             if fullname.endswith('config.yaml'):
@@ -241,17 +245,18 @@ def get_class(zoo_path):
                 else:
                     subpath = fullname.replace(zoo_path+'/','')
                 folders = subpath.split('/')
-                #print(folders)
+                if len(folders) > 1: #in sub folder
+                    if folders[1] not in subclass:
+                        subclass.append(folders[1])
                 config = read_config(fullname)
                 item = dict()
                 if 'name' in config:
-                    #print(config['name'],config['gops'])
                     item['name'] = config['name']
-                    #print(folders[0])
-                    if folders[0] in subclass:
-                        item['class'] = folders[0]
+                    if folders[1] in subclass:
+                        item['class'] = folders[1]
                     #item['gops'] = config['gops']
                     results.append((item['class'],item['name']))
+    subclass.sort()
     return results
 
 def main():
