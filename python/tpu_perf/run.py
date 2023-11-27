@@ -45,6 +45,9 @@ def parse_stats(string):
         'x'.join(s.split()) for s in re.findall(shape_prog, string))
     ret['shape'] = shape_info
 
+    launch_time_prog = '(\d+)\s*us'
+    ret['launch_time'] = re.findall(launch_time_prog, string)
+
     return ret
 
 def read_profile(fn):
@@ -84,7 +87,7 @@ def format_float(v):
     else:
         return f'{v:.03e}'
 
-def run_model(tree, config, name, b, profile_path, bmodel, stat_f, extra):
+def run_model(tree, config, name, b, profile_path, bmodel, stat_f, launch_time_f, extra):
     ok = True
     if not os.path.exists(bmodel):
         logging.error(f'{bmodel} does not exist')
@@ -141,7 +144,21 @@ def run_model(tree, config, name, b, profile_path, bmodel, stat_f, extra):
             logging.warning(f'{full_name} has no reference data')
     else:
         logging.warning(f'Runtime compare {full_name} skipped')
+
     cmd_opts.extend([iter_opt, str(int(rounds))])
+    target = tree.global_config['target']
+    if config['parallel'] and config["num_core"] == 1 and target == 'BM1688':
+        logging.info(f'Runtime test {full_name} x{int(rounds)} parallel')
+        pool.put(
+            'parallel-' + title,
+            [*cmd_opts, '--core_list', '0:1', '--bmodel', bmodel],
+            shell=False)
+        try:
+            pool.wait()
+        except:
+            ok = False
+            logging.error(f'Runtime test {full_name} parallel failed')
+
     logging.info(f'Runtime test {full_name} x{int(rounds)}')
     pool.put(
         title,
@@ -158,20 +175,6 @@ def run_model(tree, config, name, b, profile_path, bmodel, stat_f, extra):
         logging.error(f'Runtime test {full_name} failed')
         raise
 
-    log_fn = os.path.join(workdir, f'{title}.log')
-    with open(log_fn) as f:
-        stats = parse_stats(f.read())
-    from math import nan
-    real_time = stats['calculate'] * 1000 if 'calculate' in stats else nan
-    if 'calculate_times' in iter_opt:
-        real_time /= rounds
-    row = [
-        f'{config["name"]}{core_suffix}',
-        *[config.get(k, '') for k in extra],
-        stats['shape'],
-        format_float(config['gops'] * b) if 'gops' in config else 'N/A',
-        format_float(real_time)]
-
     # If profile exists, calculate mac & ddr utilization
     mac_configs = {
         'BM1684':  {'FP32': 2.2, 'INT8': 17.6},
@@ -184,11 +187,36 @@ def run_model(tree, config, name, b, profile_path, bmodel, stat_f, extra):
         'BM1684X': 64,
         'BM1688': 24,
         'CV186X': 12}
-    target = tree.global_config['target']
+    model_name = f'{config["name"]}{core_suffix}'
+    csv_writerow(workdir, title, iter_opt, rounds, config, b, model_name, 
+                 extra, target, mac_configs, ddr_configs, info, cpu_percent, stat_f, launch_time_f)
+    if config['parallel'] and config["num_core"] == 1 and target == 'BM1688':
+        csv_writerow(workdir, 'parallel-'+title, iter_opt, rounds, config, b, 'parallel-'+model_name, 
+                 extra, target, mac_configs, ddr_configs, info, cpu_percent, stat_f, launch_time_f, config['parallel'])
+    return ok
+
+
+def csv_writerow(workdir, title, iter_opt, rounds, config, b, model_name, extra, target, 
+                 mac_configs, ddr_configs, info, cpu_percent, stat_f, launch_time_f, parallel=False):
+    log_fn = os.path.join(workdir, f'{title}.log')
+    with open(log_fn) as f:
+        stats = parse_stats(f.read())
+    from math import nan
+    real_time = stats['calculate'] * 1000 if 'calculate' in stats else nan
+    if 'calculate_times' in iter_opt:
+        real_time /= rounds
+    row = [
+        model_name,
+        *[config.get(k, '') for k in extra],
+        stats['shape'],
+        format_float(config['gops'] * b) if 'gops' in config else 'N/A',
+        format_float(real_time)]
     prec = config['prec']
     if prec.startswith('INT8'):
         prec = 'INT8'
     mac_total = mac_configs.get(target).get(prec) * config['num_core']
+    if parallel:
+        mac_total *= 2  # TODO
     ddr_total = ddr_configs.get(target)
     if mac_total is None or ddr_total is None:
         logging.error('Invalid config for {} {}'.format(target, config['prec']))
@@ -223,9 +251,20 @@ def run_model(tree, config, name, b, profile_path, bmodel, stat_f, extra):
     row.append(f'{cpu_percent:.2%}')
 
     stat_f.writerow(row)
-    return ok
 
-def run_mlir(tree, path, raw_config, stat_f, extra):
+    row_launch_time = [
+        model_name,
+        *[config.get(k, '') for k in extra],
+        stats['shape'],
+        format_float(config['gops'] * b) if 'gops' in config else 'N/A']
+    row_launch_time += stats['launch_time']
+
+    launch_time_f.writerow(row_launch_time)
+
+    return
+
+
+def run_mlir(tree, path, raw_config, stat_f, launch_time_f, extra):
     ok = True
     workdir = raw_config['workdir']
     deploies = raw_config.get('deploy', [])
@@ -270,11 +309,11 @@ def run_mlir(tree, path, raw_config, stat_f, extra):
             1,
             profile_path,
             bmodel if os.path.exists(bmodel) else args.model,
-            stat_f, extra) and ok
+            stat_f, launch_time_f, extra) and ok
 
     return ok
 
-def run_nntc(tree, path, raw_config, stat_f, extra):
+def run_nntc(tree, path, raw_config, stat_f, launch_time_f, extra):
     ok = True
 
     if not raw_config.get('time', True):
@@ -304,7 +343,7 @@ def run_nntc(tree, path, raw_config, stat_f, extra):
                 config['prec'] = 'FP32'
             ok = run_model(
                 tree, config, name, b, profile_path,
-                bmodel, stat_f, extra) and ok
+                bmodel, stat_f, launch_time_f, extra) and ok
 
     int8_loops = raw_config.get('int8_loops') or \
         tree.global_config.get('int8_loops') or [dict()]
@@ -325,7 +364,7 @@ def run_nntc(tree, path, raw_config, stat_f, extra):
                 config['prec'] = 'INT8'
             ok = run_model(
                 tree, config, name, b, profile_path,
-                bmodel, stat_f, extra) and ok
+                bmodel, stat_f, launch_time_f, extra) and ok
 
     return ok
 
@@ -353,6 +392,7 @@ def main():
     BuildTree.add_arguments(parser)
     parser.add_argument('--cmodel', action='store_true')
     parser.add_argument('--report', type=str, help='report model runtime results to the specified json file')
+    parser.add_argument('--parallel', action='store_true', help='parallel run bmodels')
     args = parser.parse_args()
     global option_cmodel_stats
     option_cmodel_stats = args.cmodel
@@ -362,6 +402,7 @@ def main():
 
     tree = BuildTree(os.path.abspath('.'), args)
     stat_fn = os.path.join(tree.global_config['outdir'], 'stats.csv')
+    launch_time_fn = os.path.join(tree.global_config['outdir'], 'launch_time.csv')
     extra = set(['prec'])
     if args.mlir:
         run_func = run_mlir
@@ -400,14 +441,29 @@ def main():
                 'ddr_utilization',
                 'cpu_usage'])
 
-        for path, config in tree.walk():
-            if config['model_name'] and config['name'] != config['model_name']:
-                continue
-            for i in range(len(config['core_list'])):
-                config['num_core'] = config['core_list'][i]
-                res = run_func(tree, path, config, csv_f, extra)
-                succ_cases.append(config['name']) if res else failed_cases.append(config['name'])
-                ok = res and ok
+        with open(launch_time_fn, 'w') as f_l:
+            csv_l = csv.writer(f_l)
+            csv_l.writerow([
+                'name',
+                *extra,
+                'shape',
+                'gops',
+                'total time',
+                'npu time',
+                'core1 time',
+                'core2 time',
+                'cpu time'])
+
+            for path, config in tree.walk():
+                if config['model_name'] and config['name'] != config['model_name']:
+                    continue
+                if 'parallel' not in config.keys():
+                    config['parallel'] = False
+                for i in range(len(config['core_list'])):
+                    config['num_core'] = config['core_list'][i]
+                    res = run_func(tree, path, config, csv_f, csv_l, extra)
+                    succ_cases.append(config['name']) if res else failed_cases.append(config['name'])
+                    ok = res and ok
     
     if args.report:
         params = {"succ_cases": list(set(succ_cases)), "failed_cases": list(set(failed_cases))}
