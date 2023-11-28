@@ -46,8 +46,7 @@ def parse_stats(string):
     ret['shape'] = shape_info
 
     launch_time_prog = '(\d+)\s*us'
-    ret['launch_time'] = re.findall(launch_time_prog, string)
-
+    ret['launch_time'] = [int(item) / 1000 for item in re.findall(launch_time_prog, string)[:5]]
     return ret
 
 def read_profile(fn):
@@ -252,14 +251,15 @@ def csv_writerow(workdir, title, iter_opt, rounds, config, b, model_name, extra,
 
     stat_f.writerow(row)
 
-    row_launch_time = [
-        model_name,
-        *[config.get(k, '') for k in extra],
-        stats['shape'],
-        format_float(config['gops'] * b) if 'gops' in config else 'N/A']
-    row_launch_time += stats['launch_time']
+    if launch_time_f:
+        row_launch_time = [
+            model_name,
+            *[config.get(k, '') for k in extra],
+            stats['shape'],
+            format_float(config['gops'] * b) if 'gops' in config else 'N/A']
+        row_launch_time += stats['launch_time']
 
-    launch_time_f.writerow(row_launch_time)
+        launch_time_f.writerow(row_launch_time)
 
     return
 
@@ -393,6 +393,7 @@ def main():
     parser.add_argument('--cmodel', action='store_true')
     parser.add_argument('--report', type=str, help='report model runtime results to the specified json file')
     parser.add_argument('--parallel', action='store_true', help='parallel run bmodels')
+    parser.add_argument('--launch_time_csv', action='store_true', help='generate launch_time.csv')
     args = parser.parse_args()
     global option_cmodel_stats
     option_cmodel_stats = args.cmodel
@@ -440,30 +441,33 @@ def main():
                 'mac_utilization',
                 'ddr_utilization',
                 'cpu_usage'])
-
-        with open(launch_time_fn, 'w') as f_l:
+        f_l = csv_l = None
+        if args.launch_time_csv and args.target in ['BM1688', 'CV186X']:
+            f_l = open(launch_time_fn, 'w')
             csv_l = csv.writer(f_l)
             csv_l.writerow([
                 'name',
                 *extra,
                 'shape',
                 'gops',
-                'total time',
-                'npu time',
-                'core1 time',
-                'core2 time',
-                'cpu time'])
+                'total_time',
+                'npu_time',
+                'core1_time',
+                'core2_time',
+                'cpu_time'])
+        for path, config in tree.walk():
+            if config['model_name'] and config['name'] != config['model_name']:
+                continue
+            if 'parallel' not in config.keys():
+                config['parallel'] = False
+            for i in range(len(config['core_list'])):
+                config['num_core'] = config['core_list'][i]
+                res = run_func(tree, path, config, csv_f, csv_l, extra)
+                succ_cases.append(config['name']) if res else failed_cases.append(config['name'])
+                ok = res and ok
 
-            for path, config in tree.walk():
-                if config['model_name'] and config['name'] != config['model_name']:
-                    continue
-                if 'parallel' not in config.keys():
-                    config['parallel'] = False
-                for i in range(len(config['core_list'])):
-                    config['num_core'] = config['core_list'][i]
-                    res = run_func(tree, path, config, csv_f, csv_l, extra)
-                    succ_cases.append(config['name']) if res else failed_cases.append(config['name'])
-                    ok = res and ok
+        if f_l:
+            f_l.close()
     
     if args.report:
         params = {"succ_cases": list(set(succ_cases)), "failed_cases": list(set(failed_cases))}
