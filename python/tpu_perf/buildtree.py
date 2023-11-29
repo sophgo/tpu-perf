@@ -36,7 +36,7 @@ def check_buildtree():
     return ok
 
 class BuildTree:
-    def __init__(self, root, args = None):
+    def __init__(self, root, args):
         self.root = root
         self.global_config = global_config = read_config(root) or dict()
         global_config['root'] = root
