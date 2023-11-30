@@ -90,6 +90,9 @@ class BuildTree:
             help='Target chip')
         parser.add_argument(
             '--model_name', nargs='?', type=str, help='Model name')
+        parser.add_argument(
+            '--num_core', '-c', type=int, choices=[1, 2, 8], default=1, 
+            help='The number of TPU cores used for parallel computation')
 
     def read_global_variable(self, name, config = dict(), default=None):
         if default is None and name not in self.global_config:
@@ -268,7 +271,7 @@ class BuildTree:
                     config['core_list'] = core_values
                     break
         else:
-            config['core_list'] = [1]
+            config['core_list'] = [self.args.num_core]
 
         
         config['model_name'] = self.args.model_name
