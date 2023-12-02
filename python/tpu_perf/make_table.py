@@ -5,7 +5,15 @@ import pandas as pd
 import csv
 import os
 import yaml
-subclass = ['vision','language']
+
+subclass = []
+netfolders = set()
+target_prec_list = {'BM1684':['fp32', 'int8 1batch', 'int8 4batch', 'int8 8batch', 'int8 16batch'], \
+                    'BM1684X':['fp32', 'fp16', 'int8 4batch', 'int8 8batch', 'int8 16batch'], \
+                    'BM1688':['fp32', 'fp16', 'int8 4batch', 'int8 8batch', 'int8 16batch'], \
+                    'CV186X':['fp32', 'fp16', 'int8 4batch', 'int8 8batch', 'int8 16batch']}
+target_frequency = {'BM1684':'', 'BM1684X':'1Ghz', 'BM1688':'900Mhz', 'CV186X':'375Mhz'}
+
 def col(startcol, offset):
     return chr(ord(startcol)+offset)
 def row(startrow, offset):
@@ -16,62 +24,34 @@ sc = 'A' #start column
 leftalign = Alignment(horizontal='left',vertical='center')
 
 def init_table(target, tablename):
+
+    def append_col(workbook, col_name, col_idx):
+      workbook[col(sc,col_idx)+row(sr,0)] = col_name
+      workbook.merge_cells(col(sc,col_idx)+row(sr,0)+':'+col(sc,col_idx)+row(sr,1))
+      workbook[col(sc,col_idx)+row(sr,0)].alignment = Alignment(horizontal='center', vertical='center')
+      col_idx += 1
+      return col_idx
+
     wb = Workbook()
     ws = wb.active
     ws.title = target
-    ws[col(sc,0)+row(sr,0)] = 'NetClass'
-    ws.merge_cells(col(sc,0)+row(sr,0)+':'+col(sc,0)+row(sr,1))
-    ws[col(sc,0)+row(sr,0)].alignment = Alignment(horizontal='center', vertical='center')
+    col_idx = 0
+    col_idx = append_col(ws, 'NetClass', col_idx)
+    col_idx = append_col(ws, 'NetFolder', col_idx)
+    col_idx = append_col(ws, 'ModelName', col_idx)
+    col_idx = append_col(ws, 'Shape', col_idx)
 
-    ws[col(sc,1)+row(sr,0)] = 'NetName'
-    ws.merge_cells(col(sc,1)+row(sr,0)+':'+col(sc,1)+row(sr,1))
-    ws[col(sc,1)+row(sr,0)].alignment = Alignment(horizontal='center', vertical='center')
+    ws.title = target
+    ws[col(sc,col_idx)+row(sr,0)] = target + ' @' + target_frequency[target] + ' Benchmark(qps)'
+    ws.merge_cells(col(sc,col_idx)+row(sr,0)+':'+col(sc,col_idx+len(target_prec_list[target]) -1)+row(sr,0))
+    ws[col(sc,col_idx)+row(sr,0)].alignment = Alignment(horizontal='center', vertical='center')
 
-    ws[col(sc,2)+row(sr,0)] = 'Shape'
-    ws.merge_cells(col(sc,2)+row(sr,0)+':'+col(sc,2)+row(sr,1))
-    ws[col(sc,2)+row(sr,0)].alignment = Alignment(horizontal='center', vertical='center')
+    for prec_idx in range(0, len(target_prec_list[target])):
+      ws[col(sc,col_idx)+row(sr,1)] = target_prec_list[target][prec_idx]
+      col_idx += 1
 
-    if target=='BM1684':
-        ws.title = 'BM1684'
-        ws[col(sc,3)+row(sr,0)] = 'BM1684 Benchmark(qps)'
-        #fp32,int8 1b~16b
-        ws.merge_cells(col(sc,3)+row(sr,0)+':'+col(sc,7)+row(sr,0))
-        ws[col(sc,3)+row(sr,0)].alignment = Alignment(horizontal='center', vertical='center')
-        ws[col(sc,3)+row(sr,1)] = 'fp32'
-        ws[col(sc,4)+row(sr,1)] = 'int8 1batch'
-        ws[col(sc,5)+row(sr,1)] = 'int8 4batch'
-        ws[col(sc,6)+row(sr,1)] = 'int8 8batch'
-        ws[col(sc,7)+row(sr,1)] = 'int8 16batch'
-
-        ws[col(sc,8)+row(sr,0)] = 'Gops'
-        ws.merge_cells(col(sc,8)+row(sr,0)+':'+col(sc,8)+row(sr,1))
-        ws[col(sc,8)+row(sr,0)].alignment = Alignment(horizontal='center', vertical='center')
-
-        ws[col(sc,9)+row(sr,0)] = 'Resource'
-        ws.merge_cells(col(sc,9)+row(sr,0)+':'+col(sc,9)+row(sr,1))
-        ws[col(sc,9)+row(sr,0)].alignment = Alignment(horizontal='center', vertical='center')
-
-
-    else: #BM1684X
-        ws.title = target
-        ws[col(sc,3)+row(sr,0)] = target + '@1Ghz Benchmark(qps)'
-        #fp32, fp16, int8 1b~16b
-        ws.merge_cells(col(sc,3)+row(sr,0)+':'+col(sc,8)+row(sr,0))
-        ws[col(sc,3)+row(sr,0)].alignment = Alignment(horizontal='center', vertical='center')
-        ws[col(sc,3)+row(sr,1)] = 'fp32'
-        ws[col(sc,4)+row(sr,1)] = 'fp16'
-        ws[col(sc,5)+row(sr,1)] = 'int8 1batch'
-        ws[col(sc,6)+row(sr,1)] = 'int8 4batch'
-        ws[col(sc,7)+row(sr,1)] = 'int8 8batch'
-        ws[col(sc,8)+row(sr,1)] = 'int8 16batch'
-
-        ws[col(sc,9)+row(sr,0)] = 'Gops'
-        ws.merge_cells(col(sc,9)+row(sr,0)+':'+col(sc,9)+row(sr,1))
-        ws[col(sc,9)+row(sr,0)].alignment = Alignment(horizontal='center', vertical='center')
-
-        ws[col(sc,10)+row(sr,0)] = 'Resource'
-        ws.merge_cells(col(sc,10)+row(sr,0)+':'+col(sc,10)+row(sr,1))
-        ws[col(sc,10)+row(sr,0)].alignment = Alignment(horizontal='center', vertical='center')
+    col_idx = append_col(ws, 'Gops', col_idx)
+    col_idx = append_col(ws, 'Resource', col_idx)
 
     wb.save(tablename)
 
@@ -88,59 +68,71 @@ def adjust_sheet(filename):
         ws.column_dimensions[letter].width=collen+2
 
     #left side align
-    if ws.title == 'BM1684':
-        endsc = 7
-    else:
+    if ws.title == 'BM1684X':
         endsc = 8
+    else:
+        endsc = 7
 
     colnum = 3
-    #print(ws.max_row)
     for column in ws[col(sc,3)+':'+ col(sc,endsc)]:
         for rownum in range(ws.max_row):
-            #print(colnum, rownum)
             rownum += 1
             if (rownum > (sr+1)):
-                #print(colnum, rownum, ws.cell(rownum, colnum).value)
                 ws[col(sc,colnum)+str(rownum)].alignment = Alignment(horizontal='left', vertical='center')
         colnum+=1
 
     #bind the cells with same value
-    rowcnt = 1
-    preval = ''
-    postval = ''
-    startrow = []
-    endrow = []
-    first = True
-    for rows in ws[col(sc, 0)]:
-        if (rows.value in subclass) and first:
-            startrow.append(rowcnt)
-            first = False
-            preval = rows.value
-            postval = ws.cell(rowcnt+1, (ord(sc) - ord('A'))+1).value
-            #print(preval, postval)
-        postval = ws.cell(rowcnt+1, (ord(sc) - ord('A'))+1).value
-        if (preval!=postval) and (preval != ''):
-            endrow.append(rowcnt)
-            first = True
-        rowcnt += 1
-    #print(startrow,endrow)
-    for i in range(len(startrow)):
-        ws.merge_cells(col(sc,0)+str(startrow[i])+':'+col(sc,0)+str(endrow[i]))
-        ws[col(sc,0)+str(startrow[i])].alignment = Alignment(horizontal='left', vertical='center')
+    merge_value_set = [subclass, netfolders]
+    merge_col_symble = ['A', 'B']
+    for col_idx in [0, 1]:
+      rowcnt = 1
+      preval = ''
+      postval = ''
+      endrow = []
+      first = True
+      startrow = []
+      for rows in ws[col(sc, col_idx)]:
+          if (rows.value in merge_value_set[col_idx]) and first:
+              startrow.append(rowcnt)
+              first = False
+              preval = rows.value
+              postval = ws.cell(rowcnt+1, (ord(merge_col_symble[col_idx]) - ord('A'))+1).value
+
+          postval = ws.cell(rowcnt+1, (ord(merge_col_symble[col_idx]) - ord('A'))+1).value
+          if (preval!=postval) and (preval != ''):
+              endrow.append(rowcnt)
+              first = True
+          rowcnt += 1
+      for i in range(len(startrow)):
+          ws.merge_cells(col(sc,col_idx)+str(startrow[i])+':'+col(sc,col_idx)+str(endrow[i]))
+          ws[col(sc,col_idx)+str(startrow[i])].alignment = Alignment(horizontal='left', vertical='center')
 
     wb.save(filename)
 
 def throughput(time, batchsize):
     fps = 1000/(float(time)/batchsize)
-    #print(time, batchsize, fps)
     return float('%.2f'%fps)
 
-def find_class(netname, classes):
-    #print(classes)
+def find_class_and_folder(netname, classes):
     if classes is not None:
       for bind in classes:
         if bind[1] == netname:
-          return bind[0]
+          return bind[0], bind[2]
+        elif netname[-6:] == '_core2' and netname[:-6] == bind[1]:
+          return bind[0], bind[2]
+
+def sort_table(input_dict):
+    new_table = []
+    for k in subclass:
+        for item in input_dict:
+            if item['class'] == k:
+                new_table.append(item)
+    return new_table
+
+def get_batchsize(shape):
+    step1 = shape.split(':')
+    step2 = step1[0].split('x')[0]
+    return int(step2)
 
 def analyze_stat(statpath, class_type):
     bench = []
@@ -151,7 +143,8 @@ def analyze_stat(statpath, class_type):
       new_netname = ''
       for row in csv_file:
         new_netname = row['name']
-        #print(pre_netname, new_netname)
+        if(('dyn' in row) and (row['dyn'] == 'TRUE')):
+          continue
         if pre_netname != new_netname:
           tmp = item.copy()
           if tmp!= {}:
@@ -161,16 +154,16 @@ def analyze_stat(statpath, class_type):
                 'int8-4b':'N/A','int8-8b':'N/A','int8-16b':'N/A','gops':'N/A'}
           shape = row['shape'].split('x')[1:]
           dims = '*'.join(shape)
-          item['class'] = find_class(row['name'], class_type)
+          item['class'], item['net_folder'] = find_class_and_folder(row['name'], class_type)
           item['name'] = row['name']
           item['shape'] = dims
           item['gops'] = row['gops']
           pre_netname = new_netname
           time = 'time(ms)'
           if row['prec']=='FP32':
-            item['fp32'] = throughput(row[time], 1)
+            item['fp32'] = throughput(row[time], get_batchsize(row['shape']))
           elif ((row['prec'] == 'FP16') or (row['prec'] == 'BF16')):
-            item['fp16'] = throughput(row[time], 1)
+              item['fp16'] = throughput(row[time], get_batchsize(row['shape']))
           else:
             if(row['shape'].split('x')[0]=='1'):
               item['int8-1b'] = throughput(row[time], 1)
@@ -182,9 +175,9 @@ def analyze_stat(statpath, class_type):
               item['int8-16b'] = throughput(row[time], 16)
         else:
           if row['prec']=='FP32':
-            item['fp32'] = throughput(row[time], 1)
+            item['fp32'] = throughput(row[time], get_batchsize(row['shape']))
           elif ((row['prec'] == 'FP16') or (row['prec'] == 'BF16')):
-            item['fp16'] = throughput(row[time], 1)
+            item['fp16'] = throughput(row[time], get_batchsize(row['shape']))
           else:
             if(row['shape'].split('x')[0]=='1'):
               item['int8-1b'] = throughput(row[time], 1)
@@ -197,21 +190,19 @@ def analyze_stat(statpath, class_type):
 
       tmp = item.copy()
       bench.append(tmp)
-      #print(bench)
-      return bench
+      return sort_table(bench)
 
 def fill_table(bench, tablename, target):
     wb = load_workbook(tablename)
     ws = wb.active
     #ws.append(['name', 'shape', 'fp32', 'fp16','int8-1batch','int8-4batch','int8-8batch','int8-16batch'])
     for item in bench:
-        #print(item)
         if target=='BM1684':
-            ws.append([item['class'],item['name'], item['shape'], item['fp32'], \
+            ws.append([item['class'], item['net_folder'], item['name'], item['shape'], item['fp32'], \
                      item['int8-1b'],item['int8-4b'],item['int8-8b'], \
                      item['int8-16b'], item['gops']])
         else:
-            ws.append([item['class'],item['name'], item['shape'], item['fp32'],item['fp16'], \
+            ws.append([item['class'], item['net_folder'], item['name'], item['shape'], item['fp32'],item['fp16'], \
                      item['int8-1b'],item['int8-4b'],item['int8-8b'], \
                      item['int8-16b'], item['gops']])
 
@@ -230,9 +221,7 @@ def read_config(path):
 def get_class(zoo_path):
     results = []
     all=os.walk(zoo_path)
-    #print(zoo_path)
     for p, ds, fs in all:
-        #print(p)
         for f in fs:
             fullname = os.path.join(p,f)
             if fullname.endswith('config.yaml'):
@@ -241,17 +230,20 @@ def get_class(zoo_path):
                 else:
                     subpath = fullname.replace(zoo_path+'/','')
                 folders = subpath.split('/')
-                #print(folders)
+                if len(folders) > 1: #in sub folder
+                    if folders[1] not in subclass:
+                        subclass.append(folders[1])
                 config = read_config(fullname)
                 item = dict()
                 if 'name' in config:
-                    #print(config['name'],config['gops'])
                     item['name'] = config['name']
-                    #print(folders[0])
-                    if folders[0] in subclass:
-                        item['class'] = folders[0]
+                    if folders[1] in subclass:
+                        item['class'] = folders[1]
+                        item['net_folder'] = folders[2]
+                        netfolders.add(folders[2])
                     #item['gops'] = config['gops']
-                    results.append((item['class'],item['name']))
+                    results.append((item['class'],item['name'], item['net_folder']))
+    subclass.sort()
     return results
 
 def main():
