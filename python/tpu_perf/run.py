@@ -149,7 +149,7 @@ def run_model(tree, config, name, b, profile_path, bmodel, stat_f, launch_time_f
     if config['parallel'] and config["num_core"] == 1 and target == 'BM1688':
         logging.info(f'Runtime test {full_name} x{int(rounds)} parallel')
         pool.put(
-            'parallel-' + title,
+            title + '-parallel',
             [*cmd_opts, '--core_list', '0:1', '--bmodel', bmodel],
             shell=False)
         try:
@@ -190,7 +190,7 @@ def run_model(tree, config, name, b, profile_path, bmodel, stat_f, launch_time_f
     csv_writerow(workdir, title, iter_opt, rounds, config, b, model_name, 
                  extra, target, mac_configs, ddr_configs, info, cpu_percent, stat_f, launch_time_f)
     if config['parallel'] and config["num_core"] == 1 and target == 'BM1688':
-        csv_writerow(workdir, 'parallel-'+title, iter_opt, rounds, config, b, 'parallel-'+model_name, 
+        csv_writerow(workdir, title+'-parallel', iter_opt, rounds, config, b, model_name+'-parallel', 
                  extra, target, mac_configs, ddr_configs, info, cpu_percent, stat_f, launch_time_f, config['parallel'])
     return ok
 
@@ -204,25 +204,28 @@ def csv_writerow(workdir, title, iter_opt, rounds, config, b, model_name, extra,
     real_time = stats['calculate'] * 1000 if 'calculate' in stats else nan
     if 'calculate_times' in iter_opt:
         real_time /= rounds
-    row = [
-        model_name,
-        *[config.get(k, '') for k in extra],
-        stats['shape'],
-        format_float(config['gops'] * b) if 'gops' in config else 'N/A',
-        format_float(real_time)]
     prec = config['prec']
     if prec.startswith('INT8'):
         prec = 'INT8'
     mac_total = mac_configs.get(target).get(prec) * config['num_core']
-    if parallel:
-        mac_total *= 2  # TODO
+    if 'gops' in config:
+        gops = config['gops']
+        if parallel:
+            mac_total *= 2  # TODO
+            gops *= 2
+    row = [
+        model_name,
+        *[config.get(k, '') for k in extra],
+        stats['shape'],
+        format_float(gops * b) if 'gops' in config else 'N/A',
+        format_float(real_time)]
     ddr_total = ddr_configs.get(target)
     if mac_total is None or ddr_total is None:
         logging.error('Invalid config for {} {}'.format(target, config['prec']))
         raise RuntimeError('Invalid config')
 
     if 'gops' in config:
-        calc_mac_util = lambda t: config['gops'] * b / t / mac_total
+        calc_mac_util = lambda t: gops * b / t / mac_total
         row.append(f'{calc_mac_util(real_time):.2%}')
     else:
         logging.warning(f'No GOPs in config.yaml, {config["name"]}')
@@ -256,7 +259,7 @@ def csv_writerow(workdir, title, iter_opt, rounds, config, b, model_name, extra,
             model_name,
             *[config.get(k, '') for k in extra],
             stats['shape'],
-            format_float(config['gops'] * b) if 'gops' in config else 'N/A']
+            format_float(gops * b) if 'gops' in config else 'N/A']
         row_launch_time += stats['launch_time']
 
         launch_time_f.writerow(row_launch_time)
@@ -392,7 +395,7 @@ def main():
     BuildTree.add_arguments(parser)
     parser.add_argument('--cmodel', action='store_true')
     parser.add_argument('--report', type=str, help='report model runtime results to the specified json file')
-    parser.add_argument('--parallel', action='store_true', help='parallel run bmodels')
+    parser.add_argument('--parallel', type=bool, default=False, help='parallel run bmodels')
     parser.add_argument('--launch_time_csv', action='store_true', help='generate launch_time.csv')
     args = parser.parse_args()
     global option_cmodel_stats
@@ -460,6 +463,8 @@ def main():
                 continue
             if 'parallel' not in config.keys():
                 config['parallel'] = False
+            if args.parallel:
+                config['parallel'] = True
             for i in range(len(config['core_list'])):
                 config['num_core'] = config['core_list'][i]
                 res = run_func(tree, path, config, csv_f, csv_l, extra)
