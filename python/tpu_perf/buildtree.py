@@ -53,10 +53,11 @@ class BuildTree:
             if args.list:
                 with open(args.list) as f:
                     lines = [l.strip(' \n') for l in f.readlines()]
-                    lines = [l for l in lines if l]
+                    lines = [l for l in lines if l and not l.startswith("#")]
                 self.cases = lines
             if args.models:
                 self.cases = args.models
+            logging.info(f"fetch {len(self.cases)} cases.")
         global_config['target'] = self.target = args.target
         global_config['devices'] = args.devices
 
