@@ -11,7 +11,7 @@ import json
 from .buildtree import check_buildtree, BuildTree
 from .subp import CommandExecutor
 from .util import *
-
+from .logger import init_logger
 option_cmodel_stats = False
 
 class Average:
@@ -387,10 +387,8 @@ def collect_nntc_headers(tree, config):
     return set(k for k in extra if not skip_if(k))
 
 def main():
-    logging.basicConfig(
-        level=logging.INFO,
-        format='[%(levelname)s %(filename)s:%(lineno)d] %(message)s')
-
+    init_logger()
+    
     parser = argparse.ArgumentParser(description='tpu-perf benchmark tool')
     BuildTree.add_arguments(parser)
     parser.add_argument('--cmodel', action='store_true')

@@ -8,6 +8,7 @@ from .subp import CommandExecutor, sys_memory_size
 from .util import *
 import time
 import json
+from .logger import init_logger
 
 def replace_shape_batch(cmd, batch_size):
     match = re.search('-shapes(=| *)["\']?((\[[\\d, ]+\],?)+)["\']?', cmd)
@@ -66,7 +67,7 @@ def build_common(tree, path, config):
             pool.put(f'file_concat-{i}', cmd)
     pool.wait()
 
-def build_mlir(tree, path, config):
+def build_mlir(tree, path, config, args):
     build_common(tree, path, config)
 
     workdir = config['workdir']
@@ -115,7 +116,14 @@ def build_mlir(tree, path, config):
                 pool.wait()
             logging.info(f'Deploy {name}_{config["num_core"]}_core done')
 
-def build_nntc(tree, path, config):
+    if args.clear_if_success:
+        for root, dirs, fs in os.walk(workdir):
+            for f in fs:
+                if f.endswith("npz"):
+                    os.remove(os.path.join(root, f))
+                    logging.info(f'Remove {name}_{config["num_core"]}_core {f}.')
+
+def build_nntc(tree, path, config, *args, **kwargs):
     build_common(tree, path, config)
 
     workdir = config['workdir']
@@ -214,9 +222,7 @@ def build_nntc(tree, path, config):
         logging.info(f'INT8 bmodel {name} done in {elaps}.')
 
 def main():
-    logging.basicConfig(
-        level=logging.INFO,
-        format='[%(levelname)s %(filename)s:%(lineno)d] %(message)s')
+    init_logger()
 
     if not check_buildtree():
         sys.exit(1)
@@ -224,6 +230,7 @@ def main():
     import argparse
     parser = argparse.ArgumentParser(description='tpu-perf benchmark tool')
     parser.add_argument('--time', action='store_true')
+    parser.add_argument('--clear_if_success', action='store_true', help='clear all npz files after build succeed.')
     parser.add_argument('--exit-on-error', action='store_true')
     parser.add_argument('--report', type=str, help='report model compilation results to the specified json file')
     BuildTree.add_arguments(parser)
@@ -250,7 +257,7 @@ def main():
 
     with ThreadPoolExecutor(max_workers=num_workers) as executor:
         for path, config in tree.walk():
-            future = executor.submit(build_fn, tree, path, config)
+            future = executor.submit(build_fn, tree, path, config, args)
             if config['model_name'] and config['name'] != config['model_name']:
                 continue
             futures[config['name']] = future

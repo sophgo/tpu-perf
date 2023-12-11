@@ -3,7 +3,7 @@ import sys
 import csv
 import logging
 from .buildtree import check_buildtree, BuildTree
-
+from .logger import init_logger
 from .harness import load_plugins
 load_plugins()
 
@@ -66,9 +66,7 @@ class Runner:
                     for v in stats.values()])
 
 def main():
-    logging.basicConfig(
-        level=logging.INFO,
-        format='[%(levelname)s %(filename)s:%(lineno)d] %(message)s')
+    init_logger()
 
     if not check_buildtree():
         sys.exit(1)
