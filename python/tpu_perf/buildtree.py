@@ -53,7 +53,7 @@ class BuildTree:
             if args.list:
                 with open(args.list) as f:
                     lines = [l.strip(' \n') for l in f.readlines()]
-                    lines = [l for l in lines if l and not l.startswith("#")]
+                    lines = [l for l in lines if l and os.path.exists(l)]
                 self.cases = lines
             if args.models:
                 self.cases = args.models
