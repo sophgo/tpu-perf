@@ -71,6 +71,10 @@ def build_mlir(tree, path, config, args):
     build_common(tree, path, config)
 
     workdir = config['workdir']
+    if option_time_only and not config.get('time', True):
+        return
+    if not option_time_only and not config.get('precision'):
+        return
     name = config['name']
     if config['model_name'] and name != config['model_name']:
         return
@@ -79,6 +83,8 @@ def build_mlir(tree, path, config, args):
         for v in config.get('mlir_build_env', [])]
     pool = CommandExecutor(workdir, env)
 
+    cali_key = 'mlir_time_cali' if option_time_only else 'mlir_calibration'
+
     if 'mlir_transform' in config:
         logging.info(f'Transforming MLIR {name}...')
         trans_cmd = tree.expand_variables(config, config['mlir_transform'])
@@ -86,10 +92,10 @@ def build_mlir(tree, path, config, args):
         pool.wait()
         logging.info(f'Transform MLIR {name} done')
 
-    if 'mlir_calibration' in config:
+    if cali_key in config:
         logging.info(f'Calibrating MLIR {name}...')
-        cali_cmd = tree.expand_variables(config, config['mlir_calibration'])
-        pool.put('mlir_calibration', cali_cmd)
+        cali_cmd = tree.expand_variables(config, config[cali_key])
+        pool.put(cali_key, cali_cmd)
         pool.wait()
         logging.info(f'Calibrate MLIR {name} done')
 
