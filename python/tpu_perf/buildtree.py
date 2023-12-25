@@ -53,7 +53,7 @@ class BuildTree:
             if args.list:
                 with open(args.list) as f:
                     lines = [l.strip(' \n') for l in f.readlines()]
-                    lines = [l for l in lines if l and os.path.exists(l)]
+                    lines = [l for l in lines if l and os.path.exists(os.path.join(root, l))]
                 self.cases = lines
             if args.models:
                 self.cases = args.models
@@ -227,6 +227,7 @@ class BuildTree:
 
         with open(config_fn) as f:
             config = yaml.load(f, yaml.Loader)
+            config["config_fn"] = config_fn
 
         if not config:
             return
