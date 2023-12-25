@@ -153,7 +153,12 @@ def run_model(tree, config, name, b, profile_path, bmodel, stat_f, launch_time_f
             [*cmd_opts, '--core_list', '0:1', '--bmodel', bmodel],
             shell=False)
         try:
-            pool.wait()
+            pool.fire()
+            pid = pool.pipes[0].pid
+            p = psutil.Process(pid)
+            cpu_percent_parallel = p.cpu_percent(interval=1) / 100
+            pool.drain()
+            pool.procs.clear()
         except:
             ok = False
             logging.error(f'Runtime test {full_name} parallel failed')
@@ -179,24 +184,28 @@ def run_model(tree, config, name, b, profile_path, bmodel, stat_f, launch_time_f
         'BM1684':  {'FP32': 2.2, 'INT8': 17.6},
         'BM1684X': {'FP32': 2, 'FP16': 16, 'BF16': 16, 'INT8': 32},
         'BM1688':  {'FP32': 0.225, 'FP16': 1.8, 'BF16': 1.8, 'INT8': 7.2},
+        'BM1688_total':  {'FP32': 0.45, 'FP16': 3.6, 'BF16': 3.6, 'INT8': 14.4},
         'CV186X':  {'FP32': 0.09375, 'FP16': 0.75, 'BF16': 0.75, 'INT8': 3}
     }
     ddr_configs = {
         'BM1684': 32,
         'BM1684X': 64,
         'BM1688': 24,
+        'BM1688_total': 32,
         'CV186X': 12}
     model_name = f'{config["name"]}{core_suffix}'
     csv_writerow(workdir, title, iter_opt, rounds, config, b, model_name, 
                  extra, target, mac_configs, ddr_configs, info, cpu_percent, stat_f, launch_time_f)
     if config['parallel'] and config["num_core"] == 1 and target == 'BM1688':
         csv_writerow(workdir, title+'-parallel', iter_opt, rounds, config, b, model_name+'-parallel', 
-                 extra, target, mac_configs, ddr_configs, info, cpu_percent, stat_f, launch_time_f, config['parallel'])
+                 extra, target, mac_configs, ddr_configs, info, cpu_percent_parallel, stat_f, launch_time_f, config['parallel'])
     return ok
 
 
 def csv_writerow(workdir, title, iter_opt, rounds, config, b, model_name, extra, target, 
                  mac_configs, ddr_configs, info, cpu_percent, stat_f, launch_time_f, parallel=False):
+    if config['num_core'] != 1 or parallel:
+        target += "_total"
     log_fn = os.path.join(workdir, f'{title}.log')
     with open(log_fn) as f:
         stats = parse_stats(f.read())
@@ -207,11 +216,10 @@ def csv_writerow(workdir, title, iter_opt, rounds, config, b, model_name, extra,
     prec = config['prec']
     if prec.startswith('INT8'):
         prec = 'INT8'
-    mac_total = mac_configs.get(target).get(prec) * config['num_core']
+    mac_total = mac_configs.get(target).get(prec)
     if 'gops' in config:
         gops = config['gops']
         if parallel:
-            mac_total *= 2  # TODO
             gops *= 2
     row = [
         model_name,
@@ -234,8 +242,11 @@ def csv_writerow(workdir, title, iter_opt, rounds, config, b, model_name, extra,
         s2l = info.get('S2L', math.nan)
         l2s = info.get('L2S', math.nan)
         s2s = info.get('S2S', math.nan)
+        ddr_usage = s2l + l2s + s2s * 2
+        if parallel:
+            ddr_usage *= 2
         calc_ddr_bandwidth = lambda t: \
-            (s2l + l2s + s2s * 2) / t * 1000 / 1024**3 / ddr_total
+            ddr_usage / t * 1000 / 1024**3 / ddr_total
 
         est_time = info['runtime']
         if option_cmodel_stats:
