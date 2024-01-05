@@ -230,7 +230,7 @@ def run_model(tree, config, name, b, profile_path, bmodel, stat_f, launch_time_f
     model_name = f'{config["name"]}{core_suffix}'
     csv_writerow(workdir, title, iter_opt, rounds, config, b, model_name, 
                  extra, target, mac_configs, ddr_configs, info, cpu_percent, stat_f, launch_time_f)
-    if config['parallel'] and config["num_core"] == 1 and target == 'BM1688':
+    if config['parallel'] and config["num_core"] == 1 and target in ['BM1688', 'CV186X']:
         csv_writerow(workdir, title+'-parallel', iter_opt, rounds, config, b, model_name+'-parallel', 
                  extra, target, mac_configs, ddr_configs, info, cpu_percent_parallel, stat_f, launch_time_f, config['parallel'])
     return ok
