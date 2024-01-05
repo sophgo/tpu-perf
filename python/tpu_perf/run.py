@@ -103,8 +103,6 @@ def run_model(tree, config, name, b, profile_path, bmodel, stat_f, launch_time_f
     if 'iter_opt' in config:
         iter_opt = config['iter_opt']
     bmodel_dir = os.path.dirname(bmodel)
-    
-    
 
     info = None
     rounds = None
@@ -122,6 +120,8 @@ def run_model(tree, config, name, b, profile_path, bmodel, stat_f, launch_time_f
         rounds = math.ceil(config['time_rounds'] / b)
     elif rounds is None:
         rounds = 2000 / b
+    if cache:
+        rounds = 10
 
     core_suffix = '' if config["num_core"] == 1 else f'_core{config["num_core"]}'
     full_name = f'{config["name"]}{core_suffix} {name}'
@@ -162,7 +162,7 @@ def run_model(tree, config, name, b, profile_path, bmodel, stat_f, launch_time_f
 
     cmd_opts.extend([iter_opt, str(int(rounds))])
     target = tree.global_config['target']
-    if config['parallel'] and config["num_core"] == 1 and target == 'BM1688':
+    if config['parallel'] and config["num_core"] == 1 and target in ['BM1688', 'CV186X']:
         if cache:
             cache_fn = f"{bmodel_dir}.bmrt_test.mp.log"
             if os.path.exists(cache_fn):
@@ -230,7 +230,7 @@ def run_model(tree, config, name, b, profile_path, bmodel, stat_f, launch_time_f
     model_name = f'{config["name"]}{core_suffix}'
     csv_writerow(workdir, title, iter_opt, rounds, config, b, model_name, 
                  extra, target, mac_configs, ddr_configs, info, cpu_percent, stat_f, launch_time_f)
-    if config['parallel'] and config["num_core"] == 1 and target == 'BM1688':
+    if config['parallel'] and config["num_core"] == 1 and target in ['BM1688', 'CV186X']:
         csv_writerow(workdir, title+'-parallel', iter_opt, rounds, config, b, model_name+'-parallel', 
                  extra, target, mac_configs, ddr_configs, info, cpu_percent_parallel, stat_f, launch_time_f, config['parallel'])
     return ok
