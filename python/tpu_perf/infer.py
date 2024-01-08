@@ -6,16 +6,23 @@ import threading
 
 SGTypeTuple = (
    (np.float32, 0),
-   (np.int32, 6),
-   (np.uint32, 7),
+   (np.float16, 1),
    (np.int8, 2),
    (np.uint8, 3),
+   (np.int16, 4),
+   (np.uint16, 5),
+   (np.int32, 6),
+   (np.uint32, 7)
 )
 def sglen(t):
-    if t in [2,3]:
+    if t in [2, 3]:
         return 1
-    elif t in [0,6,7]:
+    elif t in [1, 4, 5]:
+        return 2
+    elif t in [0, 6, 7]:
         return 4
+    else:
+        raise ValueError('Invalid tensor dtype for SGinfer')
 
 def sgtype(t):
     for nt, bt in SGTypeTuple: 
