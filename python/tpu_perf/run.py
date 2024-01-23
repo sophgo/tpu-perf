@@ -33,6 +33,8 @@ class Average:
 def parse_stats(string):
     time_prog = 'INFO:(.+) time\(s\): ([\.\d]+)'
     ret = dict()
+    
+        
     for k, v in re.findall(time_prog, string):
         k = k.strip().replace(' ', '_')
         if k not in ret:
@@ -40,6 +42,10 @@ def parse_stats(string):
         ret[k].put(float(v))
     for k in ret.keys():
         ret[k] = ret[k].get()
+        
+    version_str = re.findall("Bmodel loaded, version (.*)", string)
+    version = version_str[0] if len(version_str) > 0 else "-"
+    ret['version'] = version
 
     shape_prog = 'Input \d+\).+shape=\[([\d ]+)\]'
     shape_info = ':'.join(
@@ -60,7 +66,7 @@ def read_profile(fn):
             if key == 'flops':
                 sum[key] = data[key]
                 continue
-            if key in sum:
+            if key in sum and 'vggssd' not in fn:
                 sum[key] += data[key]
             else:
                 sum[key] = data[key]
@@ -88,11 +94,11 @@ def format_float(v):
         return f'{v:.03e}'
 
 def run_model(tree, config, name, b, profile_path, bmodel, stat_f, launch_time_f, extra, cache=False):
-    ok = True, ""
+    ok, msg = True, ""
     if not os.path.exists(bmodel):
         logging.error(f'{bmodel} does not exist')
         return False, "not-found"
-    title = f'run.{name}'
+    title = f'run.{config["num_core"]}_{name}'
     workdir = config['workdir']
     env = [
         tree.expand_variables(config, v)
@@ -104,8 +110,6 @@ def run_model(tree, config, name, b, profile_path, bmodel, stat_f, launch_time_f
         iter_opt = config['iter_opt']
     bmodel_dir = os.path.dirname(bmodel)
     
-    
-
     info = None
     rounds = None
     if os.path.exists(profile_path):
@@ -124,8 +128,8 @@ def run_model(tree, config, name, b, profile_path, bmodel, stat_f, launch_time_f
         rounds = 2000 / b
 
     core_suffix = '' if config["num_core"] == 1 else f'_core{config["num_core"]}'
-    full_name = f'{config["name"]}{core_suffix} {name}'
-
+    shape_key = config['shape_key']
+    full_name = f'{config["name"]}{core_suffix}-{shape_key} {name}'
     ref_fn = os.path.join(bmodel_dir, 'output_ref_data.dat')
     dev = tree.global_config['devices'][0]
     cmd_opts = ['bmrt_test', '--dev', str(dev)]
@@ -137,13 +141,13 @@ def run_model(tree, config, name, b, profile_path, bmodel, stat_f, launch_time_f
                 shutil.copy(f"{bmodel_dir}.bmrt_test.cmp.log",f"compare-{title}.log")
             if not os.path.exists(f"compare-{title}.log"):
                 logging.warning(f"use cache but cache file {cache_fn} not exists.")
-                ok = False, "no-cache-file-found"
+                ok, msg = False, "no-cache-file-found"
             else:
                 with open(f"compare-{title}.log") as r:
                     lines = r.readlines()
                     for i in lines:
                         if "cmp failed" in i:
-                            ok = False, 'compare-failed'
+                            ok, msg = False, 'compare-failed'
         elif os.path.exists(ref_fn) and os.path.getsize(ref_fn):
             logging.info(f'Runtime compare {full_name}')
             pool.put(
@@ -153,7 +157,7 @@ def run_model(tree, config, name, b, profile_path, bmodel, stat_f, launch_time_f
             try:
                 pool.wait()
             except:
-                ok = False, 'compare-failed'
+                ok, msg = False, 'compare-failed'
                 logging.error(f'Runtime compare {full_name} {bmodel_dir} failed')
         else:
             logging.warning(f'{full_name} has no reference data')
@@ -162,6 +166,7 @@ def run_model(tree, config, name, b, profile_path, bmodel, stat_f, launch_time_f
 
     cmd_opts.extend([iter_opt, str(int(rounds))])
     target = tree.global_config['target']
+    parallel_success = True
     if config['parallel'] and config["num_core"] == 1 and target == 'BM1688':
         if cache:
             cache_fn = f"{bmodel_dir}.bmrt_test.mp.log"
@@ -169,7 +174,7 @@ def run_model(tree, config, name, b, profile_path, bmodel, stat_f, launch_time_f
                 shutil.copy(f"{bmodel_dir}.bmrt_test.mp.log",f"{title}-parallel.log")
             elif not os.path.exists(f"{title}-parallel.log"):
                 logging.warning(f"use cache but cache file {cache_fn} not exists.")
-                ok = False, "no-cache-file-found"
+                ok, msg = False, "no-cache-file-found"
             cpu_percent_parallel = 0
         else:
             logging.info(f'Runtime test {full_name} x{int(rounds)} parallel')
@@ -185,17 +190,19 @@ def run_model(tree, config, name, b, profile_path, bmodel, stat_f, launch_time_f
                 pool.drain()
                 pool.procs.clear()
             except:
-                ok = False
+                ok, msg = False, "bmodel parallel runtime failed"
                 logging.error(f'Runtime test {full_name} parallel failed')
-
+        parallel_success = ok
+        
     logging.info(f'Runtime test {full_name} x{int(rounds)}')
+    runtime_success = True
     if cache:
         cache_fn = f"{bmodel_dir}.bmrt_test.log"
         if os.path.exists(cache_fn):
             shutil.copy(f"{bmodel_dir}.bmrt_test.log",f"{title}.log")        
         elif not os.path.exists(f"{title}.log"):
             logging.warning(f"use cache but cache file {cache_fn} not exists.")
-            ok = False, "no-cache-file-found"
+            ok, msg = False, "no-cache-file-found"
         cpu_percent = 0
     else:
         pool.put(
@@ -210,9 +217,11 @@ def run_model(tree, config, name, b, profile_path, bmodel, stat_f, launch_time_f
             pool.drain()
             pool.procs.clear()
         except RuntimeError:
+            ok, msg = False, "bmodel runtime failed"
             logging.error(f'Runtime test {full_name} failed')
-            raise
-
+            
+    runtime_success = ok
+    
     # If profile exists, calculate mac & ddr utilization
     mac_configs = {
         'BM1684':  {'FP32': 2.2, 'INT8': 17.6},
@@ -228,12 +237,14 @@ def run_model(tree, config, name, b, profile_path, bmodel, stat_f, launch_time_f
         'BM1688_total': 32,
         'CV186X': 12}
     model_name = f'{config["name"]}{core_suffix}'
-    csv_writerow(workdir, title, iter_opt, rounds, config, b, model_name, 
-                 extra, target, mac_configs, ddr_configs, info, cpu_percent, stat_f, launch_time_f)
-    if config['parallel'] and config["num_core"] == 1 and target == 'BM1688':
-        csv_writerow(workdir, title+'-parallel', iter_opt, rounds, config, b, model_name+'-parallel', 
-                 extra, target, mac_configs, ddr_configs, info, cpu_percent_parallel, stat_f, launch_time_f, config['parallel'])
-    return ok
+    if runtime_success:
+        csv_writerow(workdir, title, iter_opt, rounds, config, b, model_name, 
+                    extra, target, mac_configs, ddr_configs, info, cpu_percent, stat_f, launch_time_f)
+    if parallel_success:
+        if config['parallel'] and config["num_core"] == 1 and target == 'BM1688':
+            csv_writerow(workdir, title+'-parallel', iter_opt, rounds, config, b, model_name+'-parallel', 
+                    extra, target, mac_configs, ddr_configs, info, cpu_percent_parallel, stat_f, launch_time_f, config['parallel'])
+    return ok, msg
 
 
 def csv_writerow(workdir, title, iter_opt, rounds, config, b, model_name, extra, target, 
@@ -257,6 +268,7 @@ def csv_writerow(workdir, title, iter_opt, rounds, config, b, model_name, extra,
             gops *= 2
     row = [
         model_name,
+        stats['version'],
         *[config.get(k, '') for k in extra],
         stats['shape'],
         format_float(gops * b) if 'gops' in config else 'N/A',
@@ -302,6 +314,7 @@ def csv_writerow(workdir, title, iter_opt, rounds, config, b, model_name, extra,
     if launch_time_f:
         row_launch_time = [
             model_name,
+            stats['version'],
             *[config.get(k, '') for k in extra],
             stats['shape'],
             format_float(gops * b) if 'gops' in config else 'N/A']
@@ -373,9 +386,10 @@ def run_mlir(tree, path, raw_config, stat_f, launch_time_f, extra, cache=False):
 
 def run_nntc(tree, path, raw_config, stat_f, launch_time_f, extra, cache=False):
     ok = True
+    msg = ""
 
     if not raw_config.get('time', True):
-        return ok
+        return ok, ''
     workdir = raw_config['workdir']
 
     profile_fn = 'compiler_profile_0.dat' \
@@ -424,7 +438,7 @@ def run_nntc(tree, path, raw_config, stat_f, launch_time_f, extra, cache=False):
                 tree, config, name, b, profile_path,
                 bmodel, stat_f, launch_time_f, extra) and ok
 
-    return ok
+    return ok, msg
 
 def collect_nntc_headers(tree, config):
     extra = set()
@@ -478,6 +492,7 @@ def main():
         if option_cmodel_stats:
             csv_f.writerow([
                 'name',
+                'version',
                 *extra,
                 'shape',
                 'gops',
@@ -491,6 +506,7 @@ def main():
         else:
             csv_f.writerow([
                 'name',
+                'version',
                 *extra,
                 'shape',
                 'gops',
@@ -504,6 +520,7 @@ def main():
             csv_l = csv.writer(f_l)
             csv_l.writerow([
                 'name',
+                'version',
                 *extra,
                 'shape',
                 'gops',
@@ -525,9 +542,10 @@ def main():
                 if args.mlir:
                     succ_cases.extend(res[0])
                     failed_cases.extend(res[1])
+                    ok = all(res[0]) and ok
                 else:
-                    succ_cases.append(config['name']) if res else failed_cases.append(config['name'])
-                ok = res and ok
+                    succ_cases.append(config['name']) if res[0] else failed_cases.append(config['name'])
+                    ok = res[0] and ok
 
         if f_l:
             f_l.close()

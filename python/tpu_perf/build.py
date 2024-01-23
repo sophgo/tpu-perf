@@ -78,26 +78,26 @@ def build_mlir(tree, path, config, args):
         tree.expand_variables(config, v)
         for v in config.get('mlir_build_env', [])]
     pool = CommandExecutor(workdir, env)
-
+    
     if 'mlir_transform' in config:
-        logging.info(f'Transforming MLIR {name}...')
+        logging.info(f'Transforming MLIR {name} {config["shape_key"]}...')
         trans_cmd = tree.expand_variables(config, config['mlir_transform'])
         pool.put('mlir_transform', trans_cmd)
         pool.wait()
-        logging.info(f'Transform MLIR {name} done')
+        logging.info(f'Transform MLIR {name} {config["shape_key"]} done')
 
     if 'mlir_calibration' in config:
-        logging.info(f'Calibrating MLIR {name}...')
+        logging.info(f'Calibrating MLIR {name} {config["shape_key"]}...')
         cali_cmd = tree.expand_variables(config, config['mlir_calibration'])
         pool.put('mlir_calibration', cali_cmd)
         pool.wait()
-        logging.info(f'Calibrate MLIR {name} done')
+        logging.info(f'Calibrate MLIR {name} {config["shape_key"]} done')
 
     for i in range(len(config['core_list'])):
         config['num_core'] = config['core_list'][i]
 
         if 'deploy' in config:
-            logging.info(f'Deploying {name}_{config["num_core"]}_core...')
+            logging.info(f'Deploying {name}_{config["shape_key"]}_{config["num_core"]}_core...')
             if type(config['deploy']) != list:
                 config['deploy'] = [config['deploy']]
             fns = [fn for fn in os.listdir(workdir) if fn.endswith('npz')]
@@ -114,14 +114,16 @@ def build_mlir(tree, path, config, args):
                     tree.expand_variables(config, deploy),
                     cwd=cwd)
                 pool.wait()
-            logging.info(f'Deploy {name}_{config["num_core"]}_core done')
+            logging.info(f'Deploy {name}_{config["shape_key"]}_{config["num_core"]}_core done')
 
     if args.clear_if_success:
+        count = 0
         for root, dirs, fs in os.walk(workdir):
             for f in fs:
                 if f.endswith("npz"):
                     os.remove(os.path.join(root, f))
-                    logging.info(f'Remove {name}_{config["num_core"]}_core {f}.')
+                    count += 1
+        logging.info(f"Clearing {workdir}, remove {count} npz files.")
 
 def build_nntc(tree, path, config, *args, **kwargs):
     build_common(tree, path, config)
@@ -245,8 +247,8 @@ def main():
     num_workers = 4
     if num_workers > max_workers:
         num_workers = max_workers
-        logging.info(
-            f'System memory {mem_size}, using {num_workers} workers.')
+    logging.info(
+        f'System memory {mem_size}, using {num_workers} workers.')
 
     build_fn = build_mlir if args.mlir else build_nntc
 
@@ -255,9 +257,15 @@ def main():
     futures = {}
     succ_cases, failed_cases = [], []
 
+    waited = []
+    
     with ThreadPoolExecutor(max_workers=num_workers) as executor:
         for path, config in tree.walk():
-            future = executor.submit(build_fn, tree, path, config, args)
+            if config.get('build_single_process', False):
+                waited.append([build_fn, tree, path, config, args, config['name']])
+                continue
+            else:
+                future = executor.submit(build_fn, tree, path, config, args)
             if config['model_name'] and config['name'] != config['model_name']:
                 continue
             futures[config['name']] = future
@@ -275,11 +283,26 @@ def main():
                     failed_cases.append(next(key for key, value in futures.items() if value == f))
                     ret = -1
 
-        if args.report:
-            output_fn = f'{args.report}'
-            params = {"succ_cases": list(set(succ_cases)), "failed_cases": list(set(failed_cases))}
-            with open(output_fn, 'w') as f:
-                json.dump(params, f)
+    logging.info("build large models in single process")
+    for build_fn, tree, path, config, args, key in waited:
+        try:
+            result = build_fn(tree, path, config, args)
+            succ_cases.append(key)
+        except Exception as err:
+            if args.exit_on_error:
+                logging.error(f'Quit because of exception, {err}')
+                os._exit(-1)
+            else:
+                logging.warning(f'Task failed, {err}')
+                failed_cases.append(key)
+                ret = -1     
+    
+    
+    if args.report:
+        output_fn = f'{args.report}'
+        params = {"succ_cases": list(set(succ_cases)), "failed_cases": list(set(failed_cases))}
+        with open(output_fn, 'w') as f:
+            json.dump(params, f)
 
     sys.exit(ret)
 
