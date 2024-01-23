@@ -32,32 +32,41 @@ class Runner:
         if 'harness' not in config:
             return
         from .harness import get_harness
-        key = config['harness']['type']
-        harness = get_harness(key)
+        """
+        harness:
+            type: topk
+            args:
+            - name: INT8
+                bmodel: $(workdir)/$(name)_$(target)_$(num_core)_int8_sym.bmodel
+        """
+        harness_type = config['harness']['type']
+        harness = get_harness(harness_type)
 
         def get_csv(stats):
-            if key not in self.stat_files:
-                fn = os.path.join(tree.global_config['outdir'], f'{key}.csv')
-                self.stat_files[key] = CSVWrapper(open(fn, 'w'))
-                csv_f = self.stat_files[key]
+            if harness_type not in self.stat_files:
+                fn = os.path.join(tree.global_config['outdir'], f'{harness_type}.csv')
+                self.stat_files[harness_type] = CSVWrapper(open(fn, 'w'))
+                csv_f = self.stat_files[harness_type]
                 csv_f.writerow(['name'] + list(stats.keys()))
             else:
-                csv_f = self.stat_files[key]
+                csv_f = self.stat_files[harness_type]
             return csv_f
 
         for args in config['harness']['args']:
             for num_core in config['core_list']:
                 config['num_core'] = num_core
+                shape_key = config['shape_key']
                 bmodel = tree.expand_variables(config, args['bmodel'])
                 if not os.path.exists(bmodel):
                     logging.warning(f'{bmodel} does not exist')
                     continue
-                name = tree.expand_variables(config, args['name'])
-                name_suffix = '' if num_core == 1 else f'-{num_core}core'
-                name = f'{config["name"]}-{name}{name_suffix}'
+                
+                prec = tree.expand_variables(config, args['name'])
+                name = f'{config["name"]}_{num_core}_{prec}'
                 if name in self.tested_names:
                     logging.warning(f'Skip duplicate {name}')
                     continue
+                name = f'{config["name"]}_{num_core}_{prec}_{shape_key}'
                 self.tested_names.add(name)
                 stats = harness(tree, config, args)
                 malloc_trim()
